@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"fmt"
 )
 
 func main() {
@@ -19,37 +20,46 @@ func main() {
 }
 
 func search(w http.ResponseWriter, r *http.Request){
+	w.Write([]byte("search"))	
 	return 
 }
 
 func login(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "login")
 	return 
 }
 
 func register(w http.ResponseWriter, r *http.Request){
- return 
+	fmt.Fprint(w, "login") 
+	return 
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "logout")
 	return
 }
 
 func weather(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "weather")
 	return
 }
 
 func login1(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "login1")	
 	return
 }
 
 func weather1(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "weather1")	
 	return
 }
 
 func register1(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "register1")	
 	return
 }
 
 func index(w http.ResponseWriter, r *http.Request){
+	fmt.Fprint(w, "index")	
 	return
 }
