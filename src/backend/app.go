@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"fmt"
 	"html/template"
-	"log"
 	
 	_ "modernc.org/sqlite"
 )
@@ -33,6 +32,7 @@ func main() {
 	http.HandleFunc("/login", login1)
 	http.HandleFunc("/weather", weather1)
 	http.HandleFunc("/register", register1)
+	http.HandleFunc("/about", about)
 	http.HandleFunc("/", index)
 
 	http.ListenAndServe(":8080", nil)
@@ -64,8 +64,7 @@ func weather(w http.ResponseWriter, r *http.Request){
 }
 
 func login1(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "login1")	
-	return
+	templates.ExecuteTemplate(w, "login.html", nil)
 }
 
 func weather1(w http.ResponseWriter, r *http.Request){
@@ -74,11 +73,13 @@ func weather1(w http.ResponseWriter, r *http.Request){
 }
 
 func register1(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "register1")	
-	return
+	templates.ExecuteTemplate(w, "register.html", nil)
 }
 
 func index(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "index")	
-	return
+	templates.ExecuteTemplate(w, "search.html", nil)
+}
+
+func about(w http.ResponseWriter, r *http.Request){
+	templates.ExecuteTemplate(w, "about.html", nil)
 }
