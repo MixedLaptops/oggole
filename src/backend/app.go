@@ -14,6 +14,13 @@ import (
 var db *sql.DB
 
 func main() {
+	// Initialize database
+	var err error
+	db, err = sql.Open("sqlite", "whoknows.db")
+	if err != nil {
+		panic(err)
+	}
+
 	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/login", login)
 	http.HandleFunc("/api/register", register)
