@@ -1,9 +1,17 @@
 package main	
 
 import (
+	"database/sql"
 	"net/http"
 	"fmt"
+
+	
+	_ "modernc.org/sqlite"
 )
+
+// Sætter en general database variable op som kan aktiveres i main
+// og sørge for alt der skal tilgå den kan refere til den. 
+var db *sql.DB
 
 func main() {
 	http.HandleFunc("/api/search", search)
