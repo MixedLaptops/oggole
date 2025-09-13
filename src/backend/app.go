@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 	
-	templates = template.Must(template.ParseGlob("templates/*.html"))
+	templates = template.Must(template.ParseGlob("../templates/*.html"))
 
 	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/login", login)
