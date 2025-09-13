@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 	"fmt"
-
+	"html/template"
+	"log"
 	
 	_ "modernc.org/sqlite"
 )
@@ -12,6 +13,7 @@ import (
 // Sætter en general database variable op som kan aktiveres i main
 // og sørge for alt der skal tilgå den kan refere til den. 
 var db *sql.DB
+var templates *template.Template 
 
 func main() {
 	// Initialize database
@@ -20,6 +22,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	
+	templates = template.Must(template.ParseGlob("templates/*.html"))
 
 	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/login", login)
