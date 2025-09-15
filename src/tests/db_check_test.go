@@ -2,16 +2,15 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
+	"testing"
 	_ "modernc.org/sqlite"
 )
 
-func main() {
+func TestDatabaseConnection(t *testing.T) {
 	// Test database connection
 	db, err := sql.Open("sqlite", "../whoknows.db")
 	if err != nil {
-		fmt.Println("❌ Database connection failed:", err)
-		return
+		t.Fatalf("Database connection failed: %v", err)
 	}
 	defer db.Close()
 
@@ -19,9 +18,8 @@ func main() {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
-		fmt.Println("❌ Query failed:", err)
-		return
+		t.Fatalf("Query failed: %v", err)
 	}
 
-	fmt.Printf("✅ Database works! Found %d users\n", count)
+	t.Logf("Database works! Found %d users", count)
 }
