@@ -1,1 +1,26 @@
+name: Create a comment on new issues
 
+permissions:
+  issues: write
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches:
+      - main
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create comment on PR
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            REMINDER
+            PR reviewed and approved by at least one teammate
+            Updated documentation if needed - reminder to write in the docs
+            No secrets or sensitive info in commits
+
+
+          reactions: '+1'
