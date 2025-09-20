@@ -47,8 +47,8 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func search(w http.ResponseWriter, r *http.Request){
-	w.Write([]byte("search"))
+func search(response http.ResponseWriter, request *http.Request) {
+	response.Write([]byte("search"))
 	return
 }
 
