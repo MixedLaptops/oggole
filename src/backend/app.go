@@ -56,6 +56,14 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 	var pages []Page
 
+	if query != "" {
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = ? AND content LIKE ?", language, "%"+query+"%")
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+	}
+
 	response.Write([]byte("query: " + query + ", language: " + language))
 	return
 }
