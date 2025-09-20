@@ -70,8 +70,8 @@ func search(response http.ResponseWriter, request *http.Request) {
 		}
 	}
 
-	response.Write([]byte("query: " + query + ", language: " + language))
-	return
+	response.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(response).Encode(pages)
 }
 
 func login(w http.ResponseWriter, r *http.Request){
