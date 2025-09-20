@@ -62,6 +62,12 @@ func search(response http.ResponseWriter, request *http.Request) {
 			return
 		}
 		defer rows.Close()
+
+		for rows.Next() {
+			var page Page
+			rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content)
+			pages = append(pages, page)
+		}
 	}
 
 	response.Write([]byte("query: " + query + ", language: " + language))
