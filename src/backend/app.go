@@ -10,6 +10,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type Page struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Language    string `json:"language"`
+	LastUpdated string `json:"last_updated"`
+	Content     string `json:"content"`
+}
+
 func main() {
 	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/login", login)
