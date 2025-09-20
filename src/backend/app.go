@@ -54,6 +54,8 @@ func search(response http.ResponseWriter, request *http.Request) {
 		language = "en"
 	}
 
+	var pages []Page
+
 	response.Write([]byte("query: " + query + ", language: " + language))
 	return
 }
