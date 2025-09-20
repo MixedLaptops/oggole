@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¿Who Knows? - Search</title>
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
+</head>
+<body>
+    <div class="page">
+        <div class="navigation">
+            <nav>
+                <h1><a id="nav-logo" href="/">¿Who Knows?</a></h1>
+                {{if .User}}
+                <a id="nav-logout" href="/api/logout">Log out [{{.User.Username}}]</a>
+                {{else}}
+                <a id="nav-login" href="/login">Log in</a>
+                <a id="nav-register" href="/register">Register</a>
+                {{end}}
+            </nav>
+        </div>
+        
+        {{if .FlashMessage}}
+        <ul class="flashes">
+            <li>{{.FlashMessage}}</li>
+        </ul>
+        {{end}}
+        
+        <div class="body">
+            <div>
+                <input id="search-input" placeholder="Search..." value="{{.Query}}"/>
+                <button id="search-button" onclick="makeSearchRequest()">Search</button>
+            </div>
+
+            <div id="results">
+                {{range .SearchResults}}
+                <div>
+                    <h2><a class="search-result-title" href="{{.URL}}">{{.Title}}</a></h2>
+                    <p class="search-result-description">{{.Content}}</p>
+                </div>
+                {{end}}
+            </div>
+        </div>
+        
+        <div class="footer">
+            <span>¿Who Knows? &copy; 2009</span>
+            <a href="/about">About</a>
+        </div>
+    </div>
+
+    <script>
+        let searchInput;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            searchInput = document.getElementById("search-input");
+
+            // Focus the input field
+            searchInput.focus();
+
+            // Search when the user presses Enter
+            searchInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    makeSearchRequest();
+                }
+            });
+        });
+
+        function makeSearchRequest() {
+            const query = searchInput.value;
+            const url = new URL(window.location.href);
+            url.searchParams.set('q', query);
+            window.location.href = url.toString();
+        }
+    </script>
+</body>
+</html>
