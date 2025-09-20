@@ -26,7 +26,7 @@ type Page struct {
 func main() {
 	// Initialize database
 	var err error
-	db, err = sql.Open("sqlite", "whoknows.db")
+	db, err = sql.Open("sqlite", "../whoknows.db")
 	if err != nil {
 		panic(err)
 	}
@@ -65,7 +65,9 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 		for rows.Next() {
 			var page Page
-			rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content)
+			if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
+				continue
+			}
 			pages = append(pages, page)
 		}
 	}
