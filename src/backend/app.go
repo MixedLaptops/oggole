@@ -48,7 +48,13 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
-	response.Write([]byte("search"))
+	query := request.URL.Query().Get("q")
+	language := request.URL.Query().Get("language")
+	if language == "" {
+		language = "en"
+	}
+
+	response.Write([]byte("query: " + query + ", language: " + language))
 	return
 }
 
