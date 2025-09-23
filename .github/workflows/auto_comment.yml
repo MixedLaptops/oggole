@@ -2,6 +2,7 @@ name: Create a comment on new issues
 
 permissions:
   issues: write
+  pull-requests: write
 
 on:
   pull_request:
@@ -14,13 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create comment on PR
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: ${{ github.event.issue.number }}
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
             REMINDER
             PR reviewed and approved by at least one teammate
-            Updated documentation if needed - reminder to write in the docs
+            Updated documentation if needed
             No secrets or sensitive info in commits
-
-
           reactions: '+1'
