@@ -32,8 +32,6 @@ jobs:
         env:
           FILTER_REGEX_INCLUDE: src/.*.(go|mod|sum)$
           VALIDATE_ALL_CODEBASE: false
-          VALIDATE_GO: true
-          VALIDATE_GO_MOD: true
           # Disable other linters we don't need
           VALIDATE_YAML: false
           VALIDATE_JSON: false
