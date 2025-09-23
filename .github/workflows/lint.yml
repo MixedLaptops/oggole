@@ -30,6 +30,6 @@ jobs:
       - name: Super-linter
         uses: super-linter/super-linter@v8.1.0 # x-release-please-version
         env:
-          FILTER_REGEX_EXCLUDE: ^original_code/
+          DEFAULT_WORKSPACE: ^src/
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
