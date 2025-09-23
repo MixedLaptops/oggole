@@ -26,12 +26,12 @@ type Page struct {
 func main() {
 	// Initialize database
 	var err error
-	db, err = sql.Open("sqlite", "../whoknows.db")
+	db, err = sql.Open("sqlite", "whoknows.db")
 	if err != nil {
 		panic(err)
 	}
 
-	templates = template.Must(template.ParseGlob("../templates/*.html"))
+	templates = template.Must(template.ParseGlob("templates/*.html"))
 
 	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/login", login)
@@ -43,6 +43,8 @@ func main() {
 	http.HandleFunc("/register", register1)
 	http.HandleFunc("/about", about)
 	http.HandleFunc("/", index)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
 
 	http.ListenAndServe(":8080", nil)
 }
