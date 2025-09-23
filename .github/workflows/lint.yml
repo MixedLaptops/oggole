@@ -30,6 +30,15 @@ jobs:
       - name: Super-linter
         uses: super-linter/super-linter@v8.1.0 # x-release-please-version
         env:
-          DEFAULT_WORKSPACE: /github/workspace/src
+          FILTER_REGEX_INCLUDE: src/.*.(go|mod|sum)$
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_GO: true
+          VALIDATE_GO_MOD: true
+          # Disable other linters we don't need
+          VALIDATE_YAML: false
+          VALIDATE_JSON: false
+          VALIDATE_MARKDOWN: false
+          VALIDATE_DOCKERFILE: false
+          VALIDATE_BASH: false
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
