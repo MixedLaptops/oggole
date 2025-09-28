@@ -25,9 +25,13 @@ type Page struct {
 }
 
 func main() {
-	// Initialize database
+	// Initialiser database forbindelse
 	var err error
-	db, err = sql.Open("sqlite", "whoknows.db")
+
+	// Hent database URL fra environment variable
+	dbURL := os.Getenv("DATABASE_URL")
+
+	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
 		panic(err)
 	}
