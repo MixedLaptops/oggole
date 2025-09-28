@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
 // Sætter en general database variable op som kan aktiveres i main
