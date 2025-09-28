@@ -4,8 +4,9 @@ import (
     "database/sql"
     "fmt"
     "log"
+    "os"
 
-    _ "modernc.org/sqlite"
+    _ "github.com/lib/pq"
 )
 
 type Page struct {
@@ -16,7 +17,13 @@ type Page struct {
 }
 
 func main() {
-    db, err := sql.Open("sqlite", "whoknows.db")
+    // Get database URL from environment
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" {
+        log.Fatal("DATABASE_URL environment variable is required")
+    }
+
+    db, err := sql.Open("postgres", dbURL)
     if err != nil {
         log.Fatalf("Failed to open database: %v", err)
     }
