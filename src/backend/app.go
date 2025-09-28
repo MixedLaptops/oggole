@@ -64,7 +64,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 	var pages []Page
 
 	if query != "" {
-		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = ? AND content LIKE ?", language, "%"+query+"%")
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content LIKE $2", language, "%"+query+"%")
 		if err != nil {
 			return
 		}
