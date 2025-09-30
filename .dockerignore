@@ -96,3 +96,9 @@ Thumbs.db
 *.temp
 *.swp
 *.bak
+
+# Database files - IMPORTANT: Keep databases out of public images
+*.db
+*.sqlite
+*.sqlite3
+data/
