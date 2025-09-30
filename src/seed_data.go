@@ -6,17 +6,17 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	// Get database URL from environment
+	// Get database URL from environment or use default
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
+		dbURL = "data/oggole.db"
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	db, err := sql.Open("sqlite3", dbURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func main() {
 
 	for _, page := range samplePages {
 		_, err := db.Exec(
-			"INSERT INTO pages (title, url, language, last_updated, content) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (title) DO UPDATE SET url = EXCLUDED.url, language = EXCLUDED.language, last_updated = EXCLUDED.last_updated, content = EXCLUDED.content",
+			"INSERT INTO pages (title, url, language, last_updated, content) VALUES (?, ?, ?, ?, ?) ON CONFLICT (title) DO UPDATE SET url = excluded.url, language = excluded.language, last_updated = excluded.last_updated, content = excluded.content",
 			page.title, page.url, page.language, now, page.content,
 		)
 		if err != nil {
