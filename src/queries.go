@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
     "database/sql"
@@ -16,7 +16,7 @@ type Page struct {
     Content  string
 }
 
-func main() {
+func RunQueries() {
     // Get database URL from environment or use default
     dbURL := os.Getenv("DATABASE_URL")
     if dbURL == "" {
