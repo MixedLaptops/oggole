@@ -79,7 +79,13 @@ func search(response http.ResponseWriter, request *http.Request) {
 }
 
 func login(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "login")
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	var storedPassword string
+	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username)
+	.Scan(&storedPassword)
+
 	return
 }
 
