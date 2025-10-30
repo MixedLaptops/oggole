@@ -85,7 +85,11 @@ func login(w http.ResponseWriter, r *http.Request){
 	var storedPassword string
 	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username)
 	.Scan(&storedPassword)
-
+	
+	if err != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
 	return
 }
 
