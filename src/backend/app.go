@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"golang.org/x/crypto/bcrypt"
 
 	_ "modernc.org/sqlite"
 )
@@ -86,9 +87,28 @@ func login(w http.ResponseWriter, r *http.Request){
 	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username)
 	.Scan(&storedPassword)
 	
+	// if the result we get back is nil then it worked, if not nill and error was found
 	if err != nil {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
+	} else { 
+		//Here we check if the storedPassword from db match the one used to login.
+		//bcrypt need to convert values to bytes to compare. 
+		err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+			if err != nil {
+				http.Error(w,"Invalid username or password", http.StatusUnauthorized)
+				return 
+			} else {
+				http.SetCookie(w, &http.Cookie{
+					Name: "session_token",
+					Value: username,
+					Path: "/",
+				})
+				//Here it use w(response writer) to show where to send Redirect
+				//r (the request) needed for  context, and "/" the path to be directed to.
+				//and http.StatusSeeOther sends a 303 status code, which is like post worked now switch to get and go Here
+				http.Redirect(w,r,"/", http.StatusSeeOther)
+			}
 	}
 	return
 }
