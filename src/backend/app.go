@@ -84,8 +84,7 @@ func login(w http.ResponseWriter, r *http.Request){
 	password := r.FormValue("password")
 
 	var storedPassword string
-	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username)
-	.Scan(&storedPassword)
+	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&storedPassword)
 	
 	// if the result we get back is nil then it worked, if not nill and error was found
 	if err != nil {
