@@ -32,6 +32,10 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /build/oggole .
 
+# Copy static files and templates
+COPY --from=builder /build/static ./static
+COPY --from=builder /build/templates ./templates
+
 # Security: run as non-root user
 USER app
 
