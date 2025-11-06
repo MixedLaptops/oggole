@@ -80,28 +80,43 @@ func search(response http.ResponseWriter, request *http.Request) {
 }
 
 func login(w http.ResponseWriter, r *http.Request){
+	// Only accept POST requests, reject GET and other methods
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
+	// Validate that both fields have values before processing
+	if username == "" || password == "" {
+		http.Error(w, "Username and password required", http.StatusBadRequest)
+		return
+	}
+
 	var storedPassword string
 	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&storedPassword)
-	
+
 	// if the result we get back is nil then it worked, if not nill and error was found
 	if err != nil {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
-	} else { 
+	} else {
 		//Here we check if the storedPassword from db match the one used to login.
-		//bcrypt need to convert values to bytes to compare. 
+		//bcrypt need to convert values to bytes to compare.
 		err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 			if err != nil {
 				http.Error(w,"Invalid username or password", http.StatusUnauthorized)
-				return 
+				return
 			} else {
+				// Set session cookie with security flags and expiration
 				http.SetCookie(w, &http.Cookie{
 					Name: "session_token",
 					Value: username,
 					Path: "/",
+					HttpOnly: true,  // Prevents JavaScript from accessing the cookie
+					MaxAge: 86400,   // Cookie expires after 24 hours (in seconds)
 				})
 				//Here it use w(response writer) to show where to send Redirect
 				//r (the request) needed for  context, and "/" the path to be directed to.
