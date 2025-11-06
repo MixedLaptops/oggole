@@ -23,7 +23,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 FROM alpine:3.21
 
 # Install runtime dependencies only
-RUN apk add --no-cache sqlite-libs ca-certificates && \
+RUN apk add --no-cache sqlite-libs ca-certificates wget && \
     addgroup -g 1000 app && \
     adduser -D -u 1000 -G app app
 
