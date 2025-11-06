@@ -5,8 +5,8 @@ services:
     image: nginx:alpine
     container_name: oggole-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
@@ -23,8 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    expose:
-      - "8080"
+    ports:
+      - "9090:8080"  # For direct access during local testing
     environment:
       - DATABASE_URL=/app/data/oggole.db
     volumes:
