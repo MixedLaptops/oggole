@@ -10,16 +10,6 @@ echo "🔧 Setting up Oggole on VM..."
 POSTGRES_DIR="$HOME/oggole/postgres"
 APP_DIR="$HOME/oggole"
 
-# Check if running on VM (not locally)
-if [ ! -d "/var/lib" ]; then
-    echo "⚠️  Warning: This doesn't look like a VM. Are you sure you want to continue? (y/N)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo "Aborted."
-        exit 1
-    fi
-fi
-
 # Create PostgreSQL data directory with proper permissions
 echo "📁 Creating PostgreSQL data directory at $POSTGRES_DIR..."
 mkdir -p "$POSTGRES_DIR"
