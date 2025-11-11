@@ -42,7 +42,7 @@ services:
     expose:
       - "8080"
     environment:
-      - DATABASE_URL=postgres://oggole:${POSTGRES_PASSWORD:-oggole}@postgres:5432/oggole?sslmode=disable
+      - DATABASE_URL=postgres://oggole:${POSTGRES_PASSWORD:-oggole}@postgres:5432/oggole?sslmode=require  # Production with SSL
     depends_on:
       postgres:
         condition: service_healthy

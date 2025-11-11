@@ -29,15 +29,16 @@ jobs:
 
       - name: Transfer docker-compose to VM
         run: |
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml $SSH_USER@$SSH_HOST:~/oggole/docker-compose.prod.yml
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf $SSH_USER@$SSH_HOST:~/oggole/nginx/nginx.conf
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER"@"$SSH_HOST":~/oggole/docker-compose.prod.yml
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/nginx.conf
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no -r nginx/ssl "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
 
       - name: Deploy to VM
         run: |
-          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << 'EOF'
+          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << 'EOF'
           cd ~/oggole
           docker compose -f docker-compose.prod.yml pull
           docker compose -f docker-compose.prod.yml up -d

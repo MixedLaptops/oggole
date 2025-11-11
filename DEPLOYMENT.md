@@ -134,7 +134,7 @@ sudo tar -czf postgres_backup_$(date +%Y%m%d_%H%M%S).tar.gz ~/oggole/postgres/
 ### Restore Database
 ```bash
 ssh user@your-vm
-cd ~/oggle
+cd ~/oggole
 # Restore from SQL backup
 cat your_backup.sql | docker exec -i oggole-postgres psql -U oggole oggole
 ```

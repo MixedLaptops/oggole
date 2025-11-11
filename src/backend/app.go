@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
+	"time"
 	"whoknows/utils"
 
 	_ "github.com/lib/pq"
@@ -38,18 +40,27 @@ func main() {
 		}
 	}
 
-	// Initialiser database forbindelse
-	var err error
-
-	// Hent database URL fra environment variable eller brug standard sti
+	// Hent database URL fra environment variable
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
+	// Initialiser database forbindelse
+	var err error
 	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Configure connection pooling for production
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// Verify connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	templates = template.Must(template.ParseGlob("templates/*.html"))

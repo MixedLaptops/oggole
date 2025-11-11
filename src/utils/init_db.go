@@ -9,10 +9,10 @@ import (
 )
 
 func InitDB() {
-	// Get database URL from environment or use default
+	// Get database URL from environment variable
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
 	db, err := sql.Open("postgres", dbURL)
