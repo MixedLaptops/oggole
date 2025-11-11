@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
+	"time"
 	"golang.org/x/crypto/bcrypt"
 
 	_ "modernc.org/sqlite"
@@ -22,6 +26,42 @@ type Page struct {
 	Language    string `json:"language"`
 	LastUpdated string `json:"last_updated"`
 	Content     string `json:"content"`
+}
+
+// generateToken creates a cryptographically secure random session token
+func generateToken() (string, error) {
+	b := make([]byte, 32) // 32 bytes = 256 bits
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// createSession stores a new session in the database
+func createSession(username, token string) error {
+	expiresAt := time.Now().Add(24 * time.Hour)
+	_, err := db.Exec(
+		"INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)",
+		token, username, expiresAt,
+	)
+	return err
+}
+
+// validateSession checks if a session token is valid and returns the username
+func validateSession(r *http.Request) (string, error) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		return "", err
+	}
+
+	var username string
+	err = db.QueryRow(
+		"SELECT username FROM sessions WHERE token = ? AND expires_at > ?",
+		cookie.Value, time.Now(),
+	).Scan(&username)
+
+	return username, err
 }
 
 func main() {
@@ -82,8 +122,15 @@ func search(response http.ResponseWriter, request *http.Request) {
 func login(w http.ResponseWriter, r *http.Request){
 	// Only accept POST requests, reject GET and other methods
 	if r.Method != "POST" {
+		w.Header().Set("Allow", "POST")
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	// Get client IP for audit logging
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
 	}
 
 	username := r.FormValue("username")
@@ -91,40 +138,78 @@ func login(w http.ResponseWriter, r *http.Request){
 
 	// Validate that both fields have values before processing
 	if username == "" || password == "" {
+		log.Printf("Login failed: username=%s ip=%s reason=missing_credentials", username, clientIP)
 		http.Error(w, "Username and password required", http.StatusBadRequest)
 		return
 	}
 
+	// Query for stored password hash
 	var storedPassword string
+	var userExists bool
 	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&storedPassword)
 
-	// if the result we get back is nil then it worked, if not nill and error was found
-	if err != nil {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+	if err == sql.ErrNoRows {
+		// User not found - use dummy hash to prevent timing attacks
+		userExists = false
+		storedPassword = "$2a$10$N9qo8uLOickgx2ZMRZoMye/XYF4w3KW7QO.hHC5dGxDrKVK5n7C0O" // bcrypt hash of "dummy"
+	} else if err != nil {
+		// Database error
+		log.Printf("Login failed: username=%s ip=%s reason=database_error", username, clientIP)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else {
-		//Here we check if the storedPassword from db match the one used to login.
-		//bcrypt need to convert values to bytes to compare.
-		err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
-			if err != nil {
-				http.Error(w,"Invalid username or password", http.StatusUnauthorized)
-				return
-			} else {
-				// Set session cookie with security flags and expiration
-				http.SetCookie(w, &http.Cookie{
-					Name: "session_token",
-					Value: username,
-					Path: "/",
-					HttpOnly: true,  // Prevents JavaScript from accessing the cookie
-					MaxAge: 86400,   // Cookie expires after 24 hours (in seconds)
-				})
-				//Here it use w(response writer) to show where to send Redirect
-				//r (the request) needed for  context, and "/" the path to be directed to.
-				//and http.StatusSeeOther sends a 303 status code, which is like post worked now switch to get and go Here
-				http.Redirect(w,r,"/", http.StatusSeeOther)
-			}
+		userExists = true
 	}
-	return
+
+	// Always run bcrypt compare to prevent timing attacks
+	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+
+	if err != nil || !userExists {
+		// Log the actual reason internally
+		if !userExists {
+			log.Printf("Login failed: username=%s ip=%s reason=user_not_found", username, clientIP)
+		} else {
+			log.Printf("Login failed: username=%s ip=%s reason=invalid_password", username, clientIP)
+		}
+		// Always return the same generic message
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Generate secure random session token
+	token, err := generateToken()
+	if err != nil {
+		log.Printf("Login failed: username=%s ip=%s reason=token_generation_error", username, clientIP)
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+
+	// Store session in database
+	err = createSession(username, token)
+	if err != nil {
+		log.Printf("Login failed: username=%s ip=%s reason=session_creation_error", username, clientIP)
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+
+	// Successful login
+	log.Printf("Login success: username=%s ip=%s", username, clientIP)
+
+	// Set secure session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,                    // Random token
+		Path:     "/",
+		HttpOnly: true,                     // Prevents JavaScript from accessing the cookie
+		Secure:   false,                    // Set true for production HTTPS
+		SameSite: http.SameSiteLaxMode,     // CSRF protection
+		MaxAge:   86400,                    // Cookie expires after 24 hours (in seconds)
+	})
+
+	//Here it use w(response writer) to show where to send Redirect
+	//r (the request) needed for  context, and "/" the path to be directed to.
+	//and http.StatusSeeOther sends a 303 status code, which is like post worked now switch to get and go Here
+	http.Redirect(w,r,"/", http.StatusSeeOther)
 }
 
 func register(w http.ResponseWriter, r *http.Request){
