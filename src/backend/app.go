@@ -7,8 +7,9 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"whoknows/utils"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 )
 
 // Sætter en general database variable op som kan aktiveres i main
@@ -25,16 +26,28 @@ type Page struct {
 }
 
 func main() {
+	// Check for CLI commands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "init-db":
+			utils.InitDB()
+			return
+		case "seed-data":
+			utils.SeedData()
+			return
+		}
+	}
+
 	// Initialiser database forbindelse
 	var err error
 
 	// Hent database URL fra environment variable eller brug standard sti
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "data/oggole.db"
+		dbURL = "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
 	}
 
-	db, err = sql.Open("sqlite3", dbURL)
+	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +80,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 	var pages []Page
 
 	if query != "" {
-		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = ? AND content LIKE ?", language, "%"+query+"%")
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content LIKE $2", language, "%"+query+"%")
 		if err != nil {
 			return
 		}
