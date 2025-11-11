@@ -41,29 +41,29 @@ ssh-copy-id -i ~/.ssh/vm_deploy_key.pub user@your-vm-ip
 cat ~/.ssh/vm_deploy_key  # Copy this to SSH_PRIVATE_KEY secret
 ```
 
-### 1. Local: Initialize Database
-
-```bash
-cd src
-go run init_db.go
-go run seed_data.go
-```
-
-### 2. VM: Run Setup
+### 1. VM: Run Setup
 
 ```bash
 # Upload and run setup script
 scp vm-setup.sh user@your-vm:~/
 ssh user@your-vm './vm-setup.sh'
 
-# Upload database
-scp src/whoknows.db user@your-vm:/var/lib/oggole/data/oggole.db
-
 # Upload configs
 scp docker-compose.prod.yml user@your-vm:~/oggole/
 scp deploy.sh user@your-vm:~/oggole/
 scp nginx/nginx.conf user@your-vm:~/oggole/nginx/
+ssh user@your-vm 'chmod +x ~/oggole/deploy.sh'
 ```
+
+### 2. VM: Set PostgreSQL Password (Optional)
+
+```bash
+ssh user@your-vm
+echo "export POSTGRES_PASSWORD=your_secure_password" >> ~/.bashrc
+source ~/.bashrc
+```
+
+If not set, defaults to 'oggole' (fine for development, but use a strong password for production!)
 
 ### 3. VM: First Deploy
 
@@ -71,6 +71,18 @@ scp nginx/nginx.conf user@your-vm:~/oggole/nginx/
 ssh user@your-vm
 cd ~/oggole
 ./deploy.sh
+```
+
+PostgreSQL will initialize automatically on first run!
+
+### 4. Initialize Database Schema
+
+After containers are running, initialize the database:
+
+```bash
+ssh user@your-vm
+docker exec oggole-app /app/oggole init-db
+docker exec oggole-app /app/oggole seed-data
 ```
 
 Done! Visit `http://your-vm-ip`
@@ -111,7 +123,20 @@ cd ~/oggole
 ### Backup Database
 ```bash
 ssh user@your-vm
-sudo cp /var/lib/oggole/data/oggole.db /var/lib/oggole/data/backup.db
+cd ~/oggole
+# Create a PostgreSQL backup
+docker exec oggole-postgres pg_dump -U oggole oggole > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Or backup entire PostgreSQL data directory
+sudo tar -czf postgres_backup_$(date +%Y%m%d_%H%M%S).tar.gz ~/oggole/postgres/
+```
+
+### Restore Database
+```bash
+ssh user@your-vm
+cd ~/oggle
+# Restore from SQL backup
+cat your_backup.sql | docker exec -i oggole-postgres psql -U oggole oggole
 ```
 
 ### View Logs
@@ -150,7 +175,7 @@ docker compose -f docker-compose.prod.yml down
 
 **VM**:
 - `~/oggole/` - App files
-- `~/oggole/data/oggole.db` - Database (never in Docker image!)
+- `~/oggole/postgres/` - PostgreSQL data directory (never in Docker image!)
 
 ---
 
@@ -161,9 +186,13 @@ docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml logs
 ```
 
-**Database missing?**
+**Database not connecting?**
 ```bash
-ls -la /var/lib/oggole/data/oggole.db
+# Check if PostgreSQL is running
+docker compose -f docker-compose.prod.yml ps postgres
+
+# Check PostgreSQL logs
+docker compose -f docker-compose.prod.yml logs postgres
 ```
 
 **Start over?**

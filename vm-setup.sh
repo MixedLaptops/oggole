@@ -7,7 +7,7 @@ set -e
 echo "🔧 Setting up Oggole on VM..."
 
 # Configuration
-DATA_DIR="$HOME/oggole/data"
+POSTGRES_DIR="$HOME/oggole/postgres"
 APP_DIR="$HOME/oggole"
 
 # Check if running on VM (not locally)
@@ -20,9 +20,9 @@ if [ ! -d "/var/lib" ]; then
     fi
 fi
 
-# Create data directory with proper permissions
-echo "📁 Creating data directory at $DATA_DIR..."
-mkdir -p "$DATA_DIR"
+# Create PostgreSQL data directory with proper permissions
+echo "📁 Creating PostgreSQL data directory at $POSTGRES_DIR..."
+mkdir -p "$POSTGRES_DIR"
 
 # Create app directory
 echo "📁 Creating app directory at $APP_DIR..."
@@ -35,19 +35,16 @@ echo "✅ VM setup complete!"
 echo ""
 echo "📋 Next steps:"
 echo ""
-echo "1. Initialize and upload database:"
-echo "   On your LOCAL machine:"
-echo "     cd src"
-echo "     go run init_db.go"
-echo "     go run seed_data.go"
-echo "     scp whoknows.db user@your-vm:~/oggole/data/oggole.db"
+echo "1. (Optional) Set PostgreSQL password:"
+echo "   export POSTGRES_PASSWORD=your_secure_password"
+echo "   (If not set, defaults to 'oggole')"
 echo ""
 echo "2. Upload configuration files:"
 echo "   On your LOCAL machine:"
 echo "     scp docker-compose.prod.yml user@your-vm:$APP_DIR/"
 echo "     scp deploy.sh user@your-vm:$APP_DIR/"
 echo "     scp nginx/nginx.conf user@your-vm:$APP_DIR/nginx/"
-echo "     chmod +x $APP_DIR/deploy.sh"
+echo "     ssh user@your-vm 'chmod +x ~/oggole/deploy.sh'"
 echo ""
 echo "3. (Optional) Setup GitHub Container Registry authentication:"
 echo "   If using private images, run:"
@@ -57,7 +54,13 @@ echo "4. Deploy the application:"
 echo "   cd $APP_DIR"
 echo "   ./deploy.sh"
 echo ""
+echo "   NOTE: PostgreSQL will initialize automatically on first run!"
+echo ""
+echo "5. Initialize database schema:"
+echo "   docker exec oggole-app /app/oggole init-db"
+echo "   docker exec oggole-app /app/oggole seed-data"
+echo ""
 echo "📍 Important paths:"
-echo "   - Database: ~/oggole/data/oggole.db"
+echo "   - PostgreSQL data: ~/oggole/postgres/"
 echo "   - App files: ~/oggole/"
 echo "   - Nginx config: ~/oggole/nginx/nginx.conf"
