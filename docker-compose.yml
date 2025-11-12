@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oggole-postgres
+    environment:
+      - POSTGRES_DB=oggole
+      - POSTGRES_USER=oggole
+      - POSTGRES_PASSWORD=oggole
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - oggole-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oggole"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    container_name: oggole-nginx
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      oggole:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - oggole-net
+
+  oggole:
+    container_name: oggole-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9090:8080"  # For direct access during local testing
+    environment:
+      - DATABASE_URL=postgres://oggole:oggole@postgres:5432/oggole?sslmode=disable  # Local dev without SSL
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - oggole-net
+
+volumes:
+  postgres-data:
+
+networks:
+  oggole-net:

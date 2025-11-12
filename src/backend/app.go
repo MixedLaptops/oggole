@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
+	"os"
+	"time"
+	"whoknows/utils"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
 // Sætter en general database variable op som kan aktiveres i main
@@ -24,11 +28,39 @@ type Page struct {
 }
 
 func main() {
-	// Initialize database
+	// Check for CLI commands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "init-db":
+			utils.InitDB()
+			return
+		case "seed-data":
+			utils.SeedData()
+			return
+		}
+	}
+
+	// Hent database URL fra environment variable
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	// Initialiser database forbindelse
 	var err error
-	db, err = sql.Open("sqlite", "whoknows.db")
+	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Configure connection pooling for production
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// Verify connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	templates = template.Must(template.ParseGlob("templates/*.html"))
@@ -59,7 +91,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 	var pages []Page
 
 	if query != "" {
-		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = ? AND content LIKE ?", language, "%"+query+"%")
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content LIKE $2", language, "%"+query+"%")
 		if err != nil {
 			return
 		}
