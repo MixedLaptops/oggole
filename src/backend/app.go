@@ -319,6 +319,37 @@ func register(w http.ResponseWriter, r *http.Request){
 	}
 
 	log.Printf("Registration success: username=%s email=%s ip=%s", username, email, clientIP)
+
+	// Auto-login: create session
+	token, err := generateToken()
+	if err != nil {
+		log.Printf("Auto-login failed after registration: username=%s ip=%s reason=token_generation_error", username, clientIP)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	err = createSession(username, token)
+	if err != nil {
+		log.Printf("Auto-login failed after registration: username=%s ip=%s reason=session_creation_error", username, clientIP)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Set session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
+
+	log.Printf("Auto-login success after registration: username=%s ip=%s", username, clientIP)
+
+	// Redirect to home page
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
