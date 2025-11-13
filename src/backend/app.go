@@ -236,12 +236,12 @@ func login(w http.ResponseWriter, r *http.Request){
 	// Set secure session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
-		Value:    token,                    // Random token
+		Value:    token,
 		Path:     "/",
-		HttpOnly: true,                     // Prevents JavaScript from accessing the cookie
-		Secure:   false,                    // Set true for production HTTPS
-		SameSite: http.SameSiteLaxMode,     // CSRF protection
-		MaxAge:   86400,                    // Cookie expires after 24 hours (in seconds)
+		HttpOnly: true,
+		Secure:   getCookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
 	})
 
 	//Here it use w(response writer) to show where to send Redirect
