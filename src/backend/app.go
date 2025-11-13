@@ -243,8 +243,12 @@ func login(w http.ResponseWriter, r *http.Request){
 }
 
 func register(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "login")
-	return
+	// Only accept POST requests
+	if r.Method != "POST" {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
