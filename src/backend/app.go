@@ -275,6 +275,31 @@ func register(w http.ResponseWriter, r *http.Request){
 		http.Error(w, "Passwords do not match", http.StatusBadRequest)
 		return
 	}
+
+	// Check if username already exists
+	var existingID int
+	err := db.QueryRow("SELECT id FROM users WHERE username = $1", username).Scan(&existingID)
+	if err == nil {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=username_taken", username, email, clientIP)
+		http.Error(w, "Username already taken", http.StatusConflict)
+		return
+	} else if err != sql.ErrNoRows {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=database_error", username, email, clientIP)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if email already exists
+	err = db.QueryRow("SELECT id FROM users WHERE email = $1", email).Scan(&existingID)
+	if err == nil {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=email_taken", username, email, clientIP)
+		http.Error(w, "Email already registered", http.StatusConflict)
+		return
+	} else if err != sql.ErrNoRows {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=database_error", username, email, clientIP)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
