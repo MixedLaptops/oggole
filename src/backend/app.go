@@ -255,6 +255,26 @@ func register(w http.ResponseWriter, r *http.Request){
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		clientIP = forwarded
 	}
+
+	// Get form values
+	username := r.FormValue("username")
+	email := r.FormValue("email")
+	password := r.FormValue("password")
+	password2 := r.FormValue("password2")
+
+	// Validate all fields are present
+	if username == "" || email == "" || password == "" || password2 == "" {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=missing_fields", username, email, clientIP)
+		http.Error(w, "All fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate passwords match
+	if password != password2 {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=password_mismatch", username, email, clientIP)
+		http.Error(w, "Passwords do not match", http.StatusBadRequest)
+		return
+	}
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
