@@ -249,6 +249,12 @@ func register(w http.ResponseWriter, r *http.Request){
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Get client IP for audit logging
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
