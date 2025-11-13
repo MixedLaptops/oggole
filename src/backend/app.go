@@ -349,7 +349,7 @@ func register(w http.ResponseWriter, r *http.Request){
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   getCookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400,
 	})
