@@ -300,6 +300,25 @@ func register(w http.ResponseWriter, r *http.Request){
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	// Hash password with bcrypt
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=hash_generation_error", username, email, clientIP)
+		http.Error(w, "Failed to create account", http.StatusInternalServerError)
+		return
+	}
+
+	// Insert new user
+	_, err = db.Exec("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+		username, email, string(hashedPassword))
+	if err != nil {
+		log.Printf("Registration failed: username=%s email=%s ip=%s reason=insert_error error=%v", username, email, clientIP, err)
+		http.Error(w, "Failed to create account", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Registration success: username=%s email=%s ip=%s", username, email, clientIP)
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
