@@ -9,10 +9,12 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"time"
-	"golang.org/x/crypto/bcrypt"
+	"whoknows/utils"
 
-	_ "modernc.org/sqlite"
+	"golang.org/x/crypto/bcrypt"
+	_ "github.com/lib/pq"
 )
 
 // Sætter en general database variable op som kan aktiveres i main
@@ -42,7 +44,7 @@ func generateToken() (string, error) {
 func createSession(username, token string) error {
 	expiresAt := time.Now().Add(24 * time.Hour)
 	_, err := db.Exec(
-		"INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)",
+		"INSERT INTO sessions (token, username, expires_at) VALUES ($1, $2, $3)",
 		token, username, expiresAt,
 	)
 	return err
@@ -57,7 +59,7 @@ func validateSession(r *http.Request) (string, error) {
 
 	var username string
 	err = db.QueryRow(
-		"SELECT username FROM sessions WHERE token = ? AND expires_at > ?",
+		"SELECT username FROM sessions WHERE token = $1 AND expires_at > $2",
 		cookie.Value, time.Now(),
 	).Scan(&username)
 
@@ -65,11 +67,39 @@ func validateSession(r *http.Request) (string, error) {
 }
 
 func main() {
-	// Initialize database
+	// Check for CLI commands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "init-db":
+			utils.InitDB()
+			return
+		case "seed-data":
+			utils.SeedData()
+			return
+		}
+	}
+
+	// Hent database URL fra environment variable
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	// Initialiser database forbindelse
 	var err error
-	db, err = sql.Open("sqlite", "whoknows.db")
+	db, err = sql.Open("postgres", dbURL)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Configure connection pooling for production
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// Verify connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	templates = template.Must(template.ParseGlob("templates/*.html"))
@@ -100,7 +130,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 	var pages []Page
 
 	if query != "" {
-		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = ? AND content LIKE ?", language, "%"+query+"%")
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content LIKE $2", language, "%"+query+"%")
 		if err != nil {
 			return
 		}
@@ -146,7 +176,7 @@ func login(w http.ResponseWriter, r *http.Request){
 	// Query for stored password hash
 	var storedPassword string
 	var userExists bool
-	err := db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&storedPassword)
+	err := db.QueryRow("SELECT password FROM users WHERE username = $1", username).Scan(&storedPassword)
 
 	if err == sql.ErrNoRows {
 		// User not found - use dummy hash to prevent timing attacks

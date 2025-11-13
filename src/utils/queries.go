@@ -1,11 +1,12 @@
-package main
+package utils
 
 import (
     "database/sql"
     "fmt"
     "log"
+    "os"
 
-    _ "modernc.org/sqlite"
+    _ "github.com/lib/pq"
 )
 
 type Page struct {
@@ -15,8 +16,14 @@ type Page struct {
     Content  string
 }
 
-func main() {
-    db, err := sql.Open("sqlite", "whoknows.db")
+func RunQueries() {
+    // Get database URL from environment variable
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" {
+        log.Fatal("DATABASE_URL environment variable is required")
+    }
+
+    db, err := sql.Open("postgres", dbURL)
     if err != nil {
         log.Fatalf("Failed to open database: %v", err)
     }
@@ -61,8 +68,8 @@ func main() {
 }
 
 func InsertUserQuery(db *sql.DB) (int64, error) {
-    query := "INSERT INTO users (username, email, password) values ('johndoe', 'john@example.com', '5f4dcc3b5aa765d61d8327deb882cf99')"
-    res, err := db.Exec(query)
+    query := "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
+    res, err := db.Exec(query, "johndoe", "john@example.com", "5f4dcc3b5aa765d61d8327deb882cf99")
     if err != nil {
         return 0, err
     }
@@ -74,9 +81,9 @@ func InsertUserQuery(db *sql.DB) (int64, error) {
 }
 
 func GetUserIDQuery(db *sql.DB) (int, error) {
-    query := "SELECT id FROM users WHERE username = 'johndoe'"
+    query := "SELECT id FROM users WHERE username = $1"
     var id int
-    err := db.QueryRow(query).Scan(&id)
+    err := db.QueryRow(query, "johndoe").Scan(&id)
     if err != nil {
         return 0, err
     }
@@ -84,8 +91,8 @@ func GetUserIDQuery(db *sql.DB) (int, error) {
 }
 
 func GetUserByIDQuery(db *sql.DB) (int, string, string, string, error) {
-    query := "SELECT * FROM users WHERE id = '1'"
-    row := db.QueryRow(query)
+    query := "SELECT * FROM users WHERE id = $1"
+    row := db.QueryRow(query, 1)
     var id int
     var username, email, password string
     err := row.Scan(&id, &username, &email, &password)
@@ -96,8 +103,8 @@ func GetUserByIDQuery(db *sql.DB) (int, string, string, string, error) {
 }
 
 func GetUserByUsernameQuery(db *sql.DB) (int, string, string, string, error) {
-    query := "SELECT * FROM users WHERE username = 'johndoe'"
-    row := db.QueryRow(query)
+    query := "SELECT * FROM users WHERE username = $1"
+    row := db.QueryRow(query, "johndoe")
     var id int
     var username, email, password string
     err := row.Scan(&id, &username, &email, &password)
@@ -108,8 +115,8 @@ func GetUserByUsernameQuery(db *sql.DB) (int, string, string, string, error) {
 }
 
 func SearchPagesQuery(db *sql.DB) ([]Page, error) {
-    query := "SELECT * FROM pages WHERE language = 'en' AND content LIKE '%golang%'"
-    rows, err := db.Query(query)
+    query := "SELECT * FROM pages WHERE language = $1 AND content LIKE $2"
+    rows, err := db.Query(query, "en", "%golang%")
     if err != nil {
         return nil, err
     }

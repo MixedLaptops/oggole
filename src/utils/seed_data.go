@@ -1,15 +1,22 @@
-package main
+package utils
 
 import (
 	"database/sql"
 	"log"
+	"os"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
-func main() {
-	db, err := sql.Open("sqlite", "whoknows.db")
+func SeedData() {
+	// Get database URL from environment variable
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,7 +70,7 @@ func main() {
 
 	for _, page := range samplePages {
 		_, err := db.Exec(
-			"INSERT OR REPLACE INTO pages (title, url, language, last_updated, content) VALUES (?, ?, ?, ?, ?)",
+			"INSERT INTO pages (title, url, language, last_updated, content) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (title) DO UPDATE SET url = excluded.url, language = excluded.language, last_updated = excluded.last_updated, content = excluded.content",
 			page.title, page.url, page.language, now, page.content,
 		)
 		if err != nil {

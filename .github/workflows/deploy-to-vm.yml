@@ -1,0 +1,50 @@
+name: Deploy to VM
+
+on:
+  workflow_run:
+    workflows: ["Build and Publish Docker Image"]
+    types:
+      - completed
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add SSH key to runner
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/ssh_key
+          chmod 600 ~/.ssh/ssh_key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Transfer docker-compose to VM
+        run: |
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER"@"$SSH_HOST":~/oggole/docker-compose.prod.yml
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/nginx.conf
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no -r nginx/ssl "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+
+      - name: Deploy to VM
+        run: |
+          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << 'EOF'
+          cd ~/oggole
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d
+          echo "Deployment complete!"
+          docker compose -f docker-compose.prod.yml ps
+          EOF
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
