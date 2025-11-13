@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"whoknows/utils"
 
@@ -38,6 +39,13 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// getCookieSecure determines if cookies should have Secure flag set
+// Defaults to true (secure) unless COOKIE_SECURE env var is explicitly "false"
+func getCookieSecure() bool {
+	cookieSecure := os.Getenv("COOKIE_SECURE")
+	return strings.ToLower(cookieSecure) != "false"
 }
 
 // createSession stores a new session in the database
