@@ -203,13 +203,8 @@ func login(w http.ResponseWriter, r *http.Request){
 	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 
 	if err != nil || !userExists {
-		// Log the actual reason internally
-		if !userExists {
-			log.Printf("Login failed: username=%s ip=%s reason=user_not_found", username, clientIP)
-		} else {
-			log.Printf("Login failed: username=%s ip=%s reason=invalid_password", username, clientIP)
-		}
-		// Always return the same generic message
+		// Log uniform message to prevent username enumeration
+		log.Printf("Login failed: ip=%s reason=authentication_failed", clientIP)
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
