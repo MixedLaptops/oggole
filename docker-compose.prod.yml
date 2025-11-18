@@ -53,12 +53,25 @@ services:
       sh -c "
       certbot certonly --webroot
         --webroot-path=/var/www/certbot
-        -d oggole.dk -d www.oggole.dk
-        --email your-email@example.com --agree-tos --non-interactive
+        -d ${DOMAIN:-oggole.dk} -d www.${DOMAIN:-oggole.dk}
+        --email ${CERTBOT_EMAIL} --agree-tos --non-interactive 
       && while :; do
-        certbot renew --webroot --webroot-path=/var/www/certbot --quiet
+        certbot renew --webroot --webroot-path=/var/www/certbot --quiet \
+          --deploy-hook "touch /etc/letsencrypt/reload-nginx"
         sleep 12h;
       done"
+    networks:
+      - oggole-net
+
+  nginx-reload:
+    image: alpine:latest
+    container_name: nginx-reload
+    volumes:
+      - certbot_certs:/etc/letsencrypt:ro
+    command: sh -c "while inotifywait -e create /etc/letsencrypt/reload-nginx; do docker kill -s HUP oggole-nginx; done"
+    depends_on:
+      - nginx
+    restart: unless-stopped
     networks:
       - oggole-net
 
