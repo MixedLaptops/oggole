@@ -22,8 +22,9 @@ jobs:
       - name: Add SSH key to runner
         run: |
           mkdir -p ~/.ssh/
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/ssh_key
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/ssh_key
           chmod 600 ~/.ssh/ssh_key
+          ssh-keygen -l -f ~/.ssh/ssh_key || echo "Invalid key format"
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
