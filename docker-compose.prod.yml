@@ -49,6 +49,8 @@ services:
     volumes:
       - certbot_certs:/etc/letsencrypt
       - ./nginx/www:/var/www/certbot
+    depends_on:
+      - nginx
     entrypoint: >
       sh -c "
       certbot certonly --webroot
