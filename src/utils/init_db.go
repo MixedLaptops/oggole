@@ -41,7 +41,12 @@ func InitDB() {
 		id SERIAL PRIMARY KEY,
 		username TEXT NOT NULL UNIQUE,
 		email TEXT NOT NULL UNIQUE,
-		password TEXT NOT NULL
+		password TEXT NOT NULL,
+		registration_ip TEXT,
+		registration_date TIMESTAMP DEFAULT NOW(),
+		last_login_ip TEXT,
+		last_login_date TIMESTAMP,
+		login_count INTEGER DEFAULT 0
 	);`
 
 	_, err = db.Exec(schema)
@@ -76,8 +81,8 @@ func InitDB() {
 		}
 
 		// Insert admin user
-		_, err = db.Exec("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
-			adminUsername, adminEmail, adminPasswordHash)
+		_, err = db.Exec("INSERT INTO users (username, email, password, registration_ip) VALUES ($1, $2, $3, $4)",
+			adminUsername, adminEmail, adminPasswordHash, "system")
 		if err != nil {
 			log.Fatalf("ERROR: Failed to create admin user: %v", err)
 		}
