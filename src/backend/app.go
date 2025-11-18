@@ -43,9 +43,16 @@ func generateToken() (string, error) {
 
 // getClientIP extracts the real client IP, considering proxy headers
 func getClientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		return forwarded
-	}
+	+	// If behind a trusted proxy, extract the rightmost IP from X-Forwarded-For
++		// Otherwise, only use RemoteAddr to prevent spoofing
+ 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+-		return forwarded
++		// Parse comma-separated list and take the first IP
++		// (or last IP if you trust your proxy to append the real client IP)
++		ips := strings.Split(forwarded, ",")
++		if len(ips) > 0 {
++			return strings.TrimSpace(ips[0])
++		}	
 	return r.RemoteAddr
 }
 
