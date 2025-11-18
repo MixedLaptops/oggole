@@ -41,11 +41,32 @@ func generateToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
+// getClientIP extracts the real client IP, considering proxy headers
+func getClientIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		return forwarded
+	}
+	return r.RemoteAddr
+}
+
 // getCookieSecure determines if cookies should have Secure flag set
 // Defaults to true (secure) unless COOKIE_SECURE env var is explicitly "false"
 func getCookieSecure() bool {
 	cookieSecure := os.Getenv("COOKIE_SECURE")
 	return strings.ToLower(cookieSecure) != "false"
+}
+
+// setSessionCookie creates and sets a session cookie with consistent security settings
+func setSessionCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   getCookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
 }
 
 // createSession stores a new session in the database
