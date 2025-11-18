@@ -9,7 +9,7 @@ services:
       - POSTGRES_USER=oggole
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-oggole}
     volumes:
-      - /var/lib/oggole/postgres:/var/lib/postgresql/data
+      - ~/oggole/postgres:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
       - oggole-net
@@ -20,7 +20,7 @@ services:
     expose:
       - "8080"
     environment:
-      - DATABASE_URL=postgres://oggole:${POSTGRES_PASSWORD:-oggole}@postgres:5432/oggole?sslmode=disable
+      - DATABASE_URL=postgres://oggole:${POSTGRES_PASSWORD:-oggole}@postgres:5432/oggole?sslmode=require
     depends_on:
       - postgres
     restart: unless-stopped
@@ -35,52 +35,16 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - certbot_certs:/etc/letsencrypt:ro
-      - ./nginx/www:/var/www/certbot
+      - /etc/letsencrypt/live/oggole.dk:/etc/letsencrypt/live/oggole.dk
+      - /etc/letsencrypt/archive/oggole.dk:/etc/letsencrypt/archive/oggole.dk 
     depends_on:
       - oggole
     restart: unless-stopped
     networks:
       - oggole-net
 
-  certbot:
-    image: certbot/certbot:latest
-    container_name: certbot
-    volumes:
-      - certbot_certs:/etc/letsencrypt
-      - ./nginx/www:/var/www/certbot
-    depends_on:
-      - nginx
-    entrypoint: >
-      sh -c "
-      certbot certonly --webroot
-        --webroot-path=/var/www/certbot
-        -d ${DOMAIN:-oggole.dk} -d www.${DOMAIN:-oggole.dk}
-        --email ${CERTBOT_EMAIL} --agree-tos --non-interactive 
-      && while :; do
-        certbot renew --webroot --webroot-path=/var/www/certbot --quiet \
-          --deploy-hook "touch /etc/letsencrypt/reload-nginx"
-        sleep 12h;
-      done"
-    networks:
-      - oggole-net
-
-  nginx-reload:
-    image: nginx:alpine
-    container_name: nginx-reload
-    volumes:
-      - certbot_certs:/etc/letsencrypt:ro
-    entrypoint: sh -c "apt-get update && apt-get install -y inotify-tools && while inotifywait -e create /etc/letsencrypt/reload-nginx; do nginx -s reload; done"
-    pid: "service:nginx"
-    depends_on:
-      - nginx
-    restart: unless-stopped
-    networks:
-      - oggole-net
 
 networks:
   oggole-net:
     driver: bridge
 
-volumes:
-  certbot_certs:
