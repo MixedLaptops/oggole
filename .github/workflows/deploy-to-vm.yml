@@ -30,7 +30,7 @@ jobs:
 
       - name: Transfer docker-compose to VM
         run: |
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER"@"$SSH_HOST":~/oggole/docker-compose.prod.yml
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER"@"$SSH_HOST":~/oggole/docker-compose.yml
           scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/nginx.conf
           scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no -r nginx/ssl "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/
         env:
@@ -41,10 +41,10 @@ jobs:
         run: |
           ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << 'EOF'
           cd ~/oggole
-          docker compose -f docker-compose.prod.yml pull
-          docker compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.yml pull
+          docker compose -f docker-compose.yml up -d
           echo "Deployment complete!"
-          docker compose -f docker-compose.prod.yml ps
+          docker compose -f docker-compose.yml ps
           EOF
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
