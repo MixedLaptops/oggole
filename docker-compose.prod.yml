@@ -64,11 +64,12 @@ services:
       - oggole-net
 
   nginx-reload:
-    image: alpine:latest
+    image: nginx:alpine
     container_name: nginx-reload
     volumes:
       - certbot_certs:/etc/letsencrypt:ro
-    command: sh -c "while inotifywait -e create /etc/letsencrypt/reload-nginx; do docker kill -s HUP oggole-nginx; done"
+    entrypoint: sh -c "apt-get update && apt-get install -y inotify-tools && while inotifywait -e create /etc/letsencrypt/reload-nginx; do nginx -s reload; done"
+    pid: "service:nginx"
     depends_on:
       - nginx
     restart: unless-stopped
