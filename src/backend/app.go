@@ -145,8 +145,10 @@ func main() {
 	http.HandleFunc("/", index)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-
-	http.ListenAndServe(":8080", nil)
+	log.Println("Starting server on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
@@ -161,6 +163,8 @@ func search(response http.ResponseWriter, request *http.Request) {
 	if query != "" {
 		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
 		if err != nil {
+			log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
+			http.Error(response, "Search failed", http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
@@ -168,6 +172,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 		for rows.Next() {
 			var page Page
 			if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
+				log.Printf("Search row scan failed: error=%v", err)
 				continue
 			}
 			pages = append(pages, page)
@@ -187,10 +192,7 @@ func login(w http.ResponseWriter, r *http.Request){
 	}
 
 	// Get client IP for audit logging
-	clientIP := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		clientIP = forwarded
-	}
+	clientIP := getClientIP(r)
 
 	username := r.FormValue("username")
 	password := r.FormValue("password")
@@ -246,19 +248,23 @@ func login(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
+	// Update user login tracking
+	_, err = db.Exec(`UPDATE users
+		SET last_login_ip = $1,
+			last_login_date = NOW(),
+			login_count = login_count + 1
+		WHERE username = $2`,
+		clientIP, username)
+	if err != nil {
+		log.Printf("Failed to update login tracking: username=%s error=%v", username, err)
+		// Don't fail login if tracking update fails
+	}
+
 	// Successful login
 	log.Printf("Login success: username=%s ip=%s", username, clientIP)
 
 	// Set secure session cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   getCookieSecure(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
-	})
+	setSessionCookie(w, token)
 
 	//Here it use w(response writer) to show where to send Redirect
 	//r (the request) needed for  context, and "/" the path to be directed to.
@@ -275,10 +281,7 @@ func register(w http.ResponseWriter, r *http.Request){
 	}
 
 	// Get client IP for audit logging
-	clientIP := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		clientIP = forwarded
-	}
+	clientIP := getClientIP(r)
 
 	// Get form values
 	username := r.FormValue("username")
@@ -334,8 +337,8 @@ func register(w http.ResponseWriter, r *http.Request){
 	}
 
 	// Insert new user
-	_, err = db.Exec("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
-		username, email, string(hashedPassword))
+	_, err = db.Exec("INSERT INTO users (username, email, password, registration_ip) VALUES ($1, $2, $3, $4)",
+		username, email, string(hashedPassword), clientIP)
 	if err != nil {
 		log.Printf("Registration failed: username=%s email=%s ip=%s reason=insert_error error=%v", username, email, clientIP, err)
 		http.Error(w, "Failed to create account", http.StatusInternalServerError)
@@ -360,15 +363,7 @@ func register(w http.ResponseWriter, r *http.Request){
 	}
 
 	// Set session cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   getCookieSecure(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
-	})
+	setSessionCookie(w, token)
 
 	log.Printf("Auto-login success after registration: username=%s ip=%s", username, clientIP)
 
@@ -377,8 +372,38 @@ func register(w http.ResponseWriter, r *http.Request){
 }
 
 func logout(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "logout")
-	return
+	// Get client IP for audit logging
+	clientIP := getClientIP(r)
+
+	// Get session token from cookie
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		// No session cookie, redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Delete session from database
+	_, err = db.Exec("DELETE FROM sessions WHERE token = $1", cookie.Value)
+	if err != nil {
+		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
+	} else {
+		log.Printf("Logout success: ip=%s", clientIP)
+	}
+
+	// Clear session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   getCookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1, // Negative value deletes the cookie
+	})
+
+	// Redirect to login page
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 func weather(w http.ResponseWriter, r *http.Request){
@@ -387,7 +412,10 @@ func weather(w http.ResponseWriter, r *http.Request){
 }
 
 func login1(w http.ResponseWriter, r *http.Request){
-	templates.ExecuteTemplate(w, "login.html", nil)
+	if err := templates.ExecuteTemplate(w, "login.html", nil); err != nil {
+		log.Printf("Template execution failed: template=login.html error=%v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func weather1(w http.ResponseWriter, r *http.Request){
@@ -396,13 +424,22 @@ func weather1(w http.ResponseWriter, r *http.Request){
 }
 
 func register1(w http.ResponseWriter, r *http.Request){
-	templates.ExecuteTemplate(w, "register.html", nil)
+	if err := templates.ExecuteTemplate(w, "register.html", nil); err != nil {
+		log.Printf("Template execution failed: template=register.html error=%v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func index(w http.ResponseWriter, r *http.Request){
-	templates.ExecuteTemplate(w, "search.html", nil)
+	if err := templates.ExecuteTemplate(w, "search.html", nil); err != nil {
+		log.Printf("Template execution failed: template=search.html error=%v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func about(w http.ResponseWriter, r *http.Request){
-	templates.ExecuteTemplate(w, "about.html", nil)
+	if err := templates.ExecuteTemplate(w, "about.html", nil); err != nil {
+		log.Printf("Template execution failed: template=about.html error=%v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
