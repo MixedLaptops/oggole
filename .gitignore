@@ -11,6 +11,7 @@
 *.dll
 *.so
 *.dylib
+main
 
 # Test binary, built with `go test -c`
 *.test
@@ -572,3 +573,15 @@ MigrationBackup/
 .ionide/
 
 # End of https://www.toptal.com/developers/gitignore/api/go,python,vs,vim
+
+# Docker & SSL sensitive files
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+.env
+docker-compose.override.yml
+
+# Database files (SQLite)
+*.db
+*.db-shm
+*.db-wal
