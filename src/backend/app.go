@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Sætter en general database variable op som kan aktiveres i main
@@ -145,6 +146,9 @@ func main() {
 	http.HandleFunc("/", index)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
+	// Prometheus metrics endpoint
+	http.Handle("/metrics", promhttp.Handler())
+
 	log.Println("Starting server on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
@@ -152,6 +156,7 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
+	httpRequestsTotal.Inc()
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
 	if language == "" {
@@ -161,6 +166,9 @@ func search(response http.ResponseWriter, request *http.Request) {
 	var pages []Page
 
 	if query != "" {
+		// Track search query
+		searchQueries.Inc()
+
 		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
 		if err != nil {
 			log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
@@ -228,6 +236,10 @@ func login(w http.ResponseWriter, r *http.Request){
 	if err != nil || !userExists {
 		// Log uniform message to prevent username enumeration
 		log.Printf("Login failed: ip=%s reason=authentication_failed", clientIP)
+
+		// Track failed login attempt
+		loginAttempts.WithLabelValues("failure").Inc()
+
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -262,6 +274,10 @@ func login(w http.ResponseWriter, r *http.Request){
 
 	// Successful login
 	log.Printf("Login success: username=%s ip=%s", username, clientIP)
+
+	// Track metrics
+	loginAttempts.WithLabelValues("success").Inc()
+	activeSessions.Inc()
 
 	// Set secure session cookie
 	setSessionCookie(w, token)
@@ -389,6 +405,8 @@ func logout(w http.ResponseWriter, r *http.Request){
 		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
 	} else {
 		log.Printf("Logout success: ip=%s", clientIP)
+		// Track successful logout
+		activeSessions.Dec()
 	}
 
 	// Clear session cookie
