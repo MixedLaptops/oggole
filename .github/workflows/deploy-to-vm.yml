@@ -27,23 +27,27 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Transfer docker-compose to VM
+      - name: Transfer docker-compose file to VM
         run: |
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER"@"$SSH_HOST":~/oggole/docker-compose.yml
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/nginx.conf
-          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no -r nginx/ssl "$SSH_USER"@"$SSH_HOST":~/oggole/nginx/
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no docker-compose.prod.yml $SSH_USER@$SSH_HOST:~/oggole/docker-compose.yml
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+
+      - name: Transfer nginx config to VM
+        run: |
+          scp -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no nginx/nginx.conf $SSH_USER@$SSH_HOST:~/oggole/nginx/nginx.conf
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
 
       - name: Deploy to VM
         run: |
-          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << 'EOF'
+          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << "EOF"
           cd ~/oggole
-          docker compose -f docker-compose.yml pull
-          docker compose -f docker-compose.yml up -d
-          echo "Deployment complete!"
-          docker compose -f docker-compose.yml ps
+          docker-compose pull
+          docker-compose up -d
+          docker-compose ps
           EOF
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
