@@ -14,7 +14,7 @@ COPY src/ .
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
     -o oggole \
-    ./backend/app.go
+    ./backend
 
 # Runtime stage
 FROM alpine:3.21
