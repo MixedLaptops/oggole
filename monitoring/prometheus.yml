@@ -14,8 +14,10 @@ scrape_configs:
   # Monitor Oggole App
   - job_name: 'oggole-app'
     scrape_interval: 5s
+    scheme: https
     static_configs:
-      - targets: ['20.254.43.177:8080']
+      - targets: ['oggole.dk']
         labels:
           environment: 'production'
           application: 'oggole'
+    metrics_path: '/metrics'
