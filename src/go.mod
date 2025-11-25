@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/lib/pq v1.10.9
+	github.com/prometheus/client_golang v1.20.5
 	golang.org/x/crypto v0.43.0
 	modernc.org/sqlite v1.40.0
 )
