@@ -185,6 +185,12 @@ func search(response http.ResponseWriter, request *http.Request) {
 			}
 			pages = append(pages, page)
 		}
+
+		if err := rows.Err(); err != nil {
+    	log.Printf("Search rows iteration error: %v", err)
+    	http.Error(w, "Search failed", http.StatusInternalServerError)
+    	return
+		}
 	}
 
 	response.Header().Set("Content-Type", "application/json")
