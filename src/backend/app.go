@@ -449,7 +449,42 @@ func register1(w http.ResponseWriter, r *http.Request){
 }
 
 func index(w http.ResponseWriter, r *http.Request){
-	if err := templates.ExecuteTemplate(w, "search.html", nil); err != nil {
+	query := r.URL.Query().Get("q")
+	language := r.URL.Query().Get("language")
+	if language == "" {
+		language = "en"
+	}
+
+	var pages []Page
+
+	if query != "" {
+		// Track search query
+		searchQueries.Inc()
+
+		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
+		if err != nil {
+			log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
+			http.Error(w, "Search failed", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var page Page
+			if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
+				log.Printf("Search row scan failed: error=%v", err)
+				continue
+			}
+			pages = append(pages, page)
+		}
+	}
+
+	data := map[string]interface{}{
+		"Query":         query,
+		"SearchResults": pages,
+	}
+
+	if err := templates.ExecuteTemplate(w, "search.html", data); err != nil {
 		log.Printf("Template execution failed: template=search.html error=%v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
