@@ -188,7 +188,7 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 		if err := rows.Err(); err != nil {
     	log.Printf("Search rows iteration error: %v", err)
-    	http.Error(w, "Search failed", http.StatusInternalServerError)
+    	http.Error(response, "Search failed", http.StatusInternalServerError)
     	return
 		}
 	}
