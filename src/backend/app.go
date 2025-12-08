@@ -98,7 +98,7 @@ func validateSession(r *http.Request) (string, error) {
 
 // performSearch executes a search query and returns matching pages
 func performSearch(query, language string) ([]Page, error) {
-	var pages []Page
+	pages := make([]Page, 0)
 
 	if query == "" {
 		return pages, nil
@@ -110,7 +110,7 @@ func performSearch(query, language string) ([]Page, error) {
 	rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
-		return nil, err
+		return pages, err
 	}
 	defer rows.Close()
 
