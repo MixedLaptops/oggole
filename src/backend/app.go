@@ -169,6 +169,7 @@ func main() {
 	http.HandleFunc("/api/register", register)
 	http.HandleFunc("/api/logout", logout)
 	http.HandleFunc("/api/weather", weather)
+	http.HandleFunc("/api/batch-pages", batchPages)
 	http.HandleFunc("/login", login1)
 	http.HandleFunc("/weather", weather1)
 	http.HandleFunc("/register", register1)
@@ -489,4 +490,82 @@ func about(w http.ResponseWriter, r *http.Request){
 		log.Printf("Template execution failed: template=about.html error=%v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+func batchPages(w http.ResponseWriter, r *http.Request) {
+	// Only POST allowed
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check API key
+	apiKey := r.Header.Get("X-API-Key")
+	expectedKey := os.Getenv("CRAWLER_API_KEY")
+
+	if expectedKey == "" {
+		log.Println("WARNING: CRAWLER_API_KEY not set")
+		http.Error(w, "Service misconfigured", http.StatusInternalServerError)
+		return
+	}
+
+	if apiKey != expectedKey {
+		log.Printf("Unauthorized crawler request from: %s", getClientIP(r))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse JSON
+	var req struct {
+		Pages []Page `json:"pages"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Pages) == 0 {
+		http.Error(w, "No pages provided", http.StatusBadRequest)
+		return
+	}
+
+	// Insert pages
+	success := 0
+	errors := 0
+
+	for _, page := range req.Pages {
+		if page.Title == "" || page.URL == "" || page.Content == "" {
+			errors++
+			continue
+		}
+
+		if page.Language == "" {
+			page.Language = "en"
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO pages (title, url, language, content, last_updated)
+			VALUES ($1, $2, $3, $4, NOW())
+			ON CONFLICT (title)
+			DO UPDATE SET url = EXCLUDED.url, content = EXCLUDED.content, last_updated = NOW()
+		`, page.Title, page.URL, page.Language, page.Content)
+
+		if err != nil {
+			log.Printf("Error inserting page: %v", err)
+			errors++
+		} else {
+			success++
+		}
+	}
+
+	log.Printf("Batch insert: success=%d errors=%d total=%d", success, errors, len(req.Pages))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"inserted": success,
+		"errors":   errors,
+		"total":    len(req.Pages),
+	})
 }

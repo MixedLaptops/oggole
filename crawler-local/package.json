@@ -1,0 +1,13 @@
+{
+  "name": "oggole-crawler",
+  "version": "1.0.0",
+  "description": "Local web crawler for Oggole",
+  "main": "crawler.js",
+  "type": "module",
+  "scripts": {
+    "start": "node crawler.js"
+  },
+  "dependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

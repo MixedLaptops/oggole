@@ -46,6 +46,7 @@ services:
       - "9090:8080"  # For direct access during local testing
     environment:
       - DATABASE_URL=postgres://oggole:oggole@postgres:5432/oggole?sslmode=disable  # Local dev without SSL
+      - CRAWLER_API_KEY=${CRAWLER_API_KEY:-dev_key_please_change}  # For crawler authentication
     depends_on:
       postgres:
         condition: service_healthy
