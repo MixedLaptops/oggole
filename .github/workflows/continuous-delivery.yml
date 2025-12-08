@@ -1,0 +1,140 @@
+name: Continuous Delivery
+
+# CD runs ONLY when code is merged to main (after PR approval)
+# Purpose: System-level integration tests + Build deployment artifacts
+# Matches course guide: Integration tests belong in CD (Staging phase)
+on:
+  push:
+    branches: [ main ]  # Only run when development → main PR is merged
+
+jobs:
+  # Go Integration tests - test handlers with real PostgreSQL database
+  # This is system-level testing: real database, real handlers, real HTTP
+  go-integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: oggole
+          POSTGRES_USER: oggole
+          POSTGRES_PASSWORD: oggole
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.24'
+
+    - name: Install dependencies
+      run: |
+        cd src
+        go mod tidy
+
+    - name: Run Go integration tests with PostgreSQL
+      env:
+        DATABASE_URL: "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+      run: |
+        cd src/backend
+        go test -v
+
+  # E2E tests - test complete user journeys with Playwright
+  # This validates the entire system working together (frontend + backend)
+  e2e-tests:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    needs: go-integration-tests  # Run after Go integration tests pass
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.24'
+
+    - name: Build Go application
+      run: |
+        cd src
+        go build -o main backend/app.go backend/metrics.go
+
+    - name: Start Go server in staging mode
+      run: |
+        cd src
+        export DATABASE_URL="sqlite::memory:"
+        ./main &
+
+    - name: Wait for server to be ready
+      run: |
+        echo "Waiting for server to start..."
+        sleep 5
+        while ! curl -s http://localhost:8080 > /dev/null; do sleep 1; done
+        echo "Server is ready!"
+
+    - name: Install Node.js dependencies
+      run: npm ci
+
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+
+    - name: Ensure report directory is created
+      run: mkdir -p playwright-report
+
+    - name: Run Playwright E2E tests
+      run: npx playwright test
+
+    - name: Upload test report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+
+  # Build and push Docker image - prepare deployment artifact
+  # Only runs if all integration tests pass (quality gate)
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [go-integration-tests, e2e-tests]  # Quality gate: both test suites must pass
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      run: docker build -t oggole:latest .
+
+    - name: Verify no database in image
+      run: |
+        docker run --rm oggole:latest ls -la /app/*.db 2>&1 | grep "No such file" && echo "✓ No database in image"
+
+    - name: Log in to GitHub Container Registry
+      run: echo ${{ secrets.CR_PAT }} | docker login ghcr.io -u ${{ secrets.DOCKER_GITHUB_USERNAME }} --password-stdin
+
+    - name: Push to registry
+      run: |
+        IMAGE_NAME=ghcr.io/mixedlaptops/oggole
+        docker tag oggole:latest $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+
+    - name: Image pushed successfully
+      run: echo "✓ Docker image pushed to $IMAGE_NAME:latest - Ready for deployment!"

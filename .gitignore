@@ -585,3 +585,9 @@ docker-compose.override.yml
 *.db
 *.db-shm
 *.db-wal
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
