@@ -524,9 +524,12 @@ func weather(w http.ResponseWriter, r *http.Request) {
 }
 
 func fetchWeatherFromAPI(apiKey, lat, lon string) (WeatherResponse, error) {
+	// Create HTTP client with timeout to avoid hanging requests
+	client := &http.Client{Timeout: 10 * time.Second}
+
 	// Fetch current weather
 	currentURL := fmt.Sprintf("https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s", lat, lon, apiKey)
-	currentResp, err := http.Get(currentURL)
+	currentResp, err := client.Get(currentURL)
 	if err != nil {
 		return WeatherResponse{}, err
 	}
@@ -563,7 +566,7 @@ func fetchWeatherFromAPI(apiKey, lat, lon string) (WeatherResponse, error) {
 
 	// Fetch 5 day forecast
 	forecastURL := fmt.Sprintf("https://api.openweathermap.org/data/2.5/forecast?lat=%s&lon=%s&units=metric&appid=%s", lat, lon, apiKey)
-	forecastResp, err := http.Get(forecastURL)
+	forecastResp, err := client.Get(forecastURL)
 	if err != nil {
 		return WeatherResponse{}, err
 	}
