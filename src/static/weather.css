@@ -1,0 +1,23 @@
+/* Simple table styling */
+table {
+    border-collapse: collapse;
+    background-color: white;
+}
+
+table td, table th {
+    border: 1px solid #999;
+    padding: 8px;
+}
+
+table th {
+    background-color: #ddd;
+}
+
+#loading {
+    text-align: center;
+    margin: 20px;
+}
+
+h3 {
+    text-align: center;
+}
