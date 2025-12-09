@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+import * as cheerio from 'cheerio';
 import { URL } from 'url';
 
 // ============= CONFIGURATION - EDIT THESE =============
@@ -40,12 +40,12 @@ async function crawlPage(pageUrl) {
         }
 
         const html = await response.text();
-        const { window } = new JSDOM(html);
-        const document = window.document;
+        const $ = cheerio.load(html);
 
-        const title = document.querySelector('h1')?.textContent.trim() || '';
-        const mainContent = Array.from(document.querySelectorAll('.mw-parser-output p'))
-            .map(p => p.textContent.trim())
+        const title = $('h1').text().trim() || '';
+        const mainContent = $('.mw-parser-output p')
+            .map((i, el) => $(el).text().trim())
+            .get()
             .filter(text => text.length > 0)
             .join(' ')
             .replace(/[\t\n\r]+/g, ' ')
@@ -60,11 +60,12 @@ async function crawlPage(pageUrl) {
 
         console.log(`✓ Crawled: ${cleanUrl.href}`);
 
-        const links = Array.from(document.querySelectorAll('a'))
-            .map(link => link.getAttribute('href'))
+        const links = $('a')
+            .map((i, el) => $(el).attr('href'))
+            .get()
             .filter(href => href && href.startsWith('/wiki/') && !href.includes(':'))
             .map(href => `https://en.wikipedia.org${href}`)
-            .slice(0, 3);
+            .slice(0, 10);  // Get more links to ensure we can crawl 10 pages
 
         return [pageData, ...links];
     } catch (error) {
@@ -112,13 +113,18 @@ async function main() {
         const currentUrl = toVisit.shift();
 
         if (!visitedUrls.has(currentUrl)) {
-            const [pageData, ...newLinks] = await crawlPage(currentUrl);
+            const result = await crawlPage(currentUrl);
 
-            if (pageData && pageData.content) {
-                allPages.push(pageData);
+            if (result.length > 0) {
+                const pageData = result[0];
+                const newLinks = result.slice(1);
+
+                if (pageData && pageData.content) {
+                    allPages.push(pageData);
+                }
+
+                toVisit.push(...newLinks.filter(link => !visitedUrls.has(link)));
             }
-
-            toVisit.push(...newLinks.filter(link => !visitedUrls.has(link)));
 
             if (toVisit.length > 0) {
                 await delay(DELAY_MS);

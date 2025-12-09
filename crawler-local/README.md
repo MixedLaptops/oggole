@@ -1,6 +1,6 @@
 # Oggole Local Crawler
 
-A simple web crawler that runs on your computer and sends data to your Oggole database.
+A simple web crawler using **Cheerio** that runs on your computer and sends data to your Oggole database.
 
 ## Why Local?
 
@@ -33,9 +33,16 @@ Edit the top of `crawler.js` to change:
 ## How It Works
 
 1. Crawls Wikipedia starting from `START_URL`
-2. Extracts title, URL, and content
-3. Finds links to more pages
-4. Sends everything to your Oggole API
-5. API inserts into database
+2. Uses **Cheerio** (jQuery-style selectors) to parse HTML efficiently
+3. Extracts title, URL, and content from pages
+4. Finds links to more pages (breadth-first crawling)
+5. Sends batched data to your Oggole API
+6. API inserts into database
 
-Simple!
+## Technology
+
+Built with **Cheerio** - a fast, lightweight HTML parser designed for web scraping:
+- ⚡ Optimized for parsing and extracting data from HTML
+- 🎯 jQuery-like syntax for familiar, readable selectors
+- 📦 Minimal dependencies - perfect for Node.js crawlers
+- 💪 Industry-standard tool for web scraping projects
