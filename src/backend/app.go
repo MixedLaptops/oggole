@@ -107,7 +107,17 @@ func performSearch(query, language string) ([]Page, error) {
 	// Track search query
 	searchQueries.Inc()
 
-	rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
+	// Use PostgreSQL full-text search with ranking (following EK_DAT guide)
+	rows, err := db.Query(`
+		SELECT title, url, language, last_updated, content,
+		       ts_rank(content_tsv, plainto_tsquery('english', $1)) as rank
+		FROM pages
+		WHERE language = $2
+		  AND content_tsv @@ plainto_tsquery('english', $1)
+		ORDER BY rank DESC
+		LIMIT 50
+	`, query, language)
+
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
 		return pages, err
@@ -116,7 +126,8 @@ func performSearch(query, language string) ([]Page, error) {
 
 	for rows.Next() {
 		var page Page
-		if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
+		var rank float64
+		if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content, &rank); err != nil {
 			log.Printf("Search row scan failed: error=%v", err)
 			continue
 		}
