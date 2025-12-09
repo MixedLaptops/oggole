@@ -38,11 +38,10 @@
 
             <div id="weather-content" style="display: none;">
                 <h3 id="location"></h3>
-                <p><small>Last updated: <span id="last-updated"></span></small></p>
 
-                <table border="1" cellpadding="10" style="margin: 20px auto;">
+                <table>
                     <tr>
-                        <td rowspan="2" align="center">
+                        <td rowspan="2">
                             <img id="current-icon" src="" alt="Weather">
                         </td>
                         <td><strong>Temperature:</strong></td>
@@ -67,7 +66,7 @@
                 </table>
 
                 <h3>5-Day Forecast</h3>
-                <table border="1" cellpadding="8" style="margin: 0 auto;">
+                <table class="forecast-table">
                     <thead>
                         <tr>
                             <th>Day</th>
@@ -106,9 +105,8 @@
                 loading.style.display = 'none';
                 content.style.display = 'block';
 
-                // Update location and time
+                // Update location
                 document.getElementById('location').textContent = data.location;
-                document.getElementById('last-updated').textContent = data.last_updated;
 
                 // Update current weather
                 document.getElementById('current-temp').textContent = Math.round(data.current.temp) + '°C';
@@ -126,14 +124,23 @@
 
                 data.forecast.forEach(day => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${day.date}</td>
-                        <td align="center">
-                            <img src="https://openweathermap.org/img/wn/${day.icon}.png" alt="${day.description}">
-                            <br>${day.description}
-                        </td>
-                        <td align="center">${Math.round(day.temp_max)}° / ${Math.round(day.temp_min)}°</td>
-                    `;
+                    const dateCell = document.createElement('td');
+                    dateCell.textContent = day.date;
+                    
+                    const condCell = document.createElement('td');
+                    condCell.style.textAlign = 'center';
+                    const img = document.createElement('img');
+                    img.src = `https://openweathermap.org/img/wn/${encodeURIComponent(day.icon)}.png`;
+                    img.alt = day.description;
+                    condCell.appendChild(img);
+                    condCell.appendChild(document.createElement('br'));
+                    condCell.appendChild(document.createTextNode(day.description));
+                    
+                    const tempCell = document.createElement('td');
+                    tempCell.style.textAlign = 'center';
+                    tempCell.textContent = `${Math.round(day.temp_max)}° / ${Math.round(day.temp_min)}°`;
+                    
+                    row.append(dateCell, condCell, tempCell);
                     forecastBody.appendChild(row);
                 });
 

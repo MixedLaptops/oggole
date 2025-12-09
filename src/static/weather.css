@@ -2,15 +2,26 @@
 table {
     border-collapse: collapse;
     background-color: white;
+    border: 1px solid #999;
+    margin: 20px auto;
 }
 
 table td, table th {
     border: 1px solid #999;
-    padding: 8px;
+    padding: 10px;
 }
 
 table th {
     background-color: #ddd;
+}
+
+table.forecast-table td,
+table.forecast-table th {
+    padding: 8px;
+}
+
+table td[rowspan] {
+    text-align: center;
 }
 
 #loading {
