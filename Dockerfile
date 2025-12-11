@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.21
 
 # Install runtime dependencies only
-RUN apk add --no-cache ca-certificates wget && \
+RUN apk add --no-cache ca-certificates=20250911-r0 wget=1.25.0-r0 && \
     addgroup -g 1000 app && \
     adduser -D -u 1000 -G app app
 
