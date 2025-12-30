@@ -5,10 +5,18 @@ import { URL } from 'url';
 const START_URL = 'https://en.wikipedia.org/wiki/DevOps';
 const MAX_PAGES = 10;
 const DELAY_MS = 1000;
+const TIMEOUT_MS = 10000;  // 10 second timeout for all fetch requests
 
 // Update these for your setup
-const OGGOLE_API_URL = 'http://localhost:8080/api/batch-pages';  // Change to https://oggole.dk/api/batch-pages for production
-const API_KEY = 'jiLU8V+1kztFB0lxwa06cKPqXLOIPkymc4EGvoC/qXY=';  // Must match your .env file
+const OGGOLE_API_URL = process.env.OGGOLE_API_URL || 'http://localhost:8080/api/batch-pages';
+const API_KEY = process.env.CRAWLER_API_KEY;
+
+// Validate API key is set
+if (!API_KEY) {
+    console.error('ERROR: CRAWLER_API_KEY environment variable is not set!');
+    console.error('Please create a .env file in crawler-local/ with: CRAWLER_API_KEY=your_key_here');
+    process.exit(1);
+}
 // ======================================================
 
 const visitedUrls = new Set();
@@ -27,12 +35,19 @@ async function crawlPage(pageUrl) {
 
     visitedUrls.add(cleanUrl.href);
 
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     try {
         const response = await fetch(cleanUrl.href, {
             headers: {
                 'User-Agent': 'OggoleCrawler/1.0 (Educational purposes)'
-            }
+            },
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId); // Clear timeout on successful fetch
 
         if (!response.ok) {
             console.error(`Failed to fetch ${cleanUrl.href}: ${response.statusText}`);
@@ -69,12 +84,23 @@ async function crawlPage(pageUrl) {
 
         return [pageData, ...links];
     } catch (error) {
-        console.error(`✗ Error crawling ${cleanUrl.href}:`, error.message);
+        clearTimeout(timeoutId); // Clear timeout in error path
+
+        // Handle timeout/abort errors specifically
+        if (error.name === 'AbortError') {
+            console.error(`✗ Timeout crawling ${cleanUrl.href}: Request took longer than ${TIMEOUT_MS / 1000}s`);
+        } else {
+            console.error(`✗ Error crawling ${cleanUrl.href}:`, error.message);
+        }
         return [];
     }
 }
 
 async function sendToOggole(pages) {
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     try {
         console.log(`\nSending ${pages.length} pages to Oggole...`);
 
@@ -84,8 +110,11 @@ async function sendToOggole(pages) {
                 'Content-Type': 'application/json',
                 'X-API-Key': API_KEY
             },
-            body: JSON.stringify({ pages })
+            body: JSON.stringify({ pages }),
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId); // Clear timeout on successful fetch
 
         if (!response.ok) {
             const text = await response.text();
@@ -96,7 +125,14 @@ async function sendToOggole(pages) {
         console.log(`✓ Success! Inserted ${result.inserted}/${result.total} pages`);
         return true;
     } catch (error) {
-        console.error('✗ Error:', error.message);
+        clearTimeout(timeoutId); // Clear timeout in error path
+
+        // Handle timeout/abort errors specifically
+        if (error.name === 'AbortError') {
+            console.error(`✗ Timeout sending to Oggole: Request took longer than ${TIMEOUT_MS / 1000}s`);
+        } else {
+            console.error('✗ Error:', error.message);
+        }
         return false;
     }
 }

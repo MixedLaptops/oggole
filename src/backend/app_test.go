@@ -75,12 +75,6 @@ func TestGetClientIP(t *testing.T) {
 			remoteAddr:    "10.0.0.1:12345",
 			expectedIP:    "10.0.0.1:12345",
 		},
-		{
-			name:          "uses X-Forwarded-For even if empty string",
-			xForwardedFor: "",
-			remoteAddr:    "10.0.0.1:12345",
-			expectedIP:    "10.0.0.1:12345",
-		},
 	}
 
 	for _, tt := range tests {

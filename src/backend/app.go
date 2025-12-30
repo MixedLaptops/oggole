@@ -11,15 +11,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 	"whoknows/utils"
 
 	"github.com/joho/godotenv"
-	"strings"
-	"time"
-	"whoknows/utils"
-
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
