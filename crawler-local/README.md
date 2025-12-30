@@ -24,11 +24,20 @@ That's it! It will crawl Wikipedia pages and send them to your Oggole database.
 
 ## Configuration
 
-Edit the top of `crawler.js` to change:
+Configure using environment variables in `.env` file or export them:
 
-- `START_URL` - Which page to start from
-- `MAX_PAGES` - How many pages to crawl
-- `API_KEY` - Must match your `.env` file
+- `CRAWLER_API_KEY` - Your API key (required, must match server .env)
+- `OGGOLE_API_URL` - API endpoint (default: http://localhost:8080/api/batch-pages)
+- `START_URL` - Which page to start from (optional, edit in crawler.js)
+- `MAX_PAGES` - How many pages to crawl (optional, edit in crawler.js)
+
+Example `.env` file:
+```
+CRAWLER_API_KEY=your_key_here
+OGGOLE_API_URL=http://localhost:9090/api/batch-pages
+```
+
+Note: START_URL and MAX_PAGES can be edited directly in crawler.js for development, but using environment variables is recommended for production use.
 
 ## How It Works
 

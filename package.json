@@ -21,6 +21,6 @@
   },
   "homepage": "https://github.com/MixedLaptops/oggole#readme",
   "devDependencies": {
-    "@playwright/test": "^1.57.0"
+    "@playwright/test": "^1.55.0"
   }
 }

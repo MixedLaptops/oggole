@@ -55,6 +55,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: go-integration-tests  # Run after Go integration tests pass
 
+    env:
+      DATABASE_URL: "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: oggole
+          POSTGRES_USER: oggole
+          POSTGRES_PASSWORD: oggole
+        ports:
+          - 5432:5432
+
     steps:
     - uses: actions/checkout@v4
 
@@ -72,18 +85,20 @@ jobs:
         cd src
         go build -o main backend/app.go backend/metrics.go
 
-    - name: Start Go server in staging mode
+    - name: Initialize database
       run: |
         cd src
-        export DATABASE_URL="sqlite::memory:"
+        ./main init-db
+
+    - name: Start Go server
+      run: |
+        cd src
         ./main &
 
-    - name: Wait for server to be ready
+    - name: Wait for server
       run: |
-        echo "Waiting for server to start..."
         sleep 5
         while ! curl -s http://localhost:8080 > /dev/null; do sleep 1; done
-        echo "Server is ready!"
 
     - name: Install Node.js dependencies
       run: npm ci

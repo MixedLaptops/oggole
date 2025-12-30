@@ -197,6 +197,11 @@ func main() {
 		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
+	// Verify CRAWLER_API_KEY is set
+	if os.Getenv("CRAWLER_API_KEY") == "" {
+		log.Fatal("CRAWLER_API_KEY environment variable is required")
+	}
+
 	// Initialiser database forbindelse
 	var err error
 	db, err = sql.Open("postgres", dbURL)
