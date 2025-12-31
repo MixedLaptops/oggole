@@ -55,15 +55,19 @@ scp nginx/nginx.conf user@your-vm:~/oggole/nginx/
 ssh user@your-vm 'chmod +x ~/oggole/deploy.sh'
 ```
 
-### 2. VM: Set PostgreSQL Password (Optional)
+### 2. VM: Create .env file
 
 ```bash
 ssh user@your-vm
-echo "export POSTGRES_PASSWORD=your_secure_password" >> ~/.bashrc
-source ~/.bashrc
+cd ~/oggole
+
+cat > .env << EOF
+CRAWLER_API_KEY=$(openssl rand -base64 32)
+OPENWEATHER_API_KEY=your_openweather_api_key_here
+EOF
 ```
 
-If not set, defaults to 'oggole' (fine for development, but use a strong password for production!)
+⚠️ Replace `your_openweather_api_key_here` with your API key from https://openweathermap.org/api
 
 ### 3. VM: First Deploy
 

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¿Who Knows? - Weather</title>
+    <link rel="stylesheet" type="text/css" href="/static/search.css">
+    <link rel="stylesheet" type="text/css" href="/static/weather.css">
+</head>
+<body>
+    <div class="page">
+        <div class="navigation">
+            <nav>
+                <h1><a id="nav-logo" href="/">¿Who Knows?</a></h1>
+                <div class="nav-links">
+                    <a id="nav-weather" href="/weather">Weather</a>
+                    {{if .User}}
+                    <a id="nav-logout" href="/api/logout">Log out [{{.User.Username}}]</a>
+                    {{else}}
+                    <a id="nav-login" href="/login">Log in</a>
+                    <a id="nav-register" href="/register">Register</a>
+                    {{end}}
+                </div>
+            </nav>
+        </div>
+
+        {{if .FlashMessage}}
+        <ul class="flashes">
+            <li>{{.FlashMessage}}</li>
+        </ul>
+        {{end}}
+
+        <div class="body">
+            <h2>Weather</h2>
+
+            <div id="loading">Loading...</div>
+            <div id="error" style="display: none; color: red;"></div>
+
+            <div id="weather-content" style="display: none;">
+                <h3 id="location"></h3>
+
+                <table>
+                    <tr>
+                        <td rowspan="2">
+                            <img id="current-icon" src="" alt="Weather">
+                        </td>
+                        <td><strong>Temperature:</strong></td>
+                        <td id="current-temp"></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Conditions:</strong></td>
+                        <td id="current-description"></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Feels like:</strong></td>
+                        <td colspan="2" id="feels-like"></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Humidity:</strong></td>
+                        <td colspan="2" id="humidity"></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Wind:</strong></td>
+                        <td colspan="2" id="wind-speed"></td>
+                    </tr>
+                </table>
+
+                <h3>5-Day Forecast</h3>
+                <table class="forecast-table">
+                    <thead>
+                        <tr>
+                            <th>Day</th>
+                            <th>Conditions</th>
+                            <th>High / Low</th>
+                        </tr>
+                    </thead>
+                    <tbody id="forecast-grid">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>¿Who Knows? &copy; 2009</span>
+            <a href="/about">About</a>
+        </div>
+    </div>
+
+    <script>
+        async function fetchWeather() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const content = document.getElementById('weather-content');
+
+            try {
+                const response = await fetch('/api/weather');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Hide loading, show content
+                loading.style.display = 'none';
+                content.style.display = 'block';
+
+                // Update location
+                document.getElementById('location').textContent = data.location;
+
+                // Update current weather
+                document.getElementById('current-temp').textContent = Math.round(data.current.temp) + '°C';
+                document.getElementById('current-description').textContent =
+                    data.current.description.charAt(0).toUpperCase() + data.current.description.slice(1);
+                document.getElementById('current-icon').src =
+                    `https://openweathermap.org/img/wn/${data.current.icon}@2x.png`;
+                document.getElementById('feels-like').textContent = Math.round(data.current.feels_like) + '°C';
+                document.getElementById('humidity').textContent = data.current.humidity + '%';
+                document.getElementById('wind-speed').textContent = Math.round(data.current.wind_speed * 3.6) + ' km/h';
+
+                // Update forecast
+                const forecastBody = document.getElementById('forecast-grid');
+                forecastBody.innerHTML = '';
+
+                data.forecast.forEach(day => {
+                    const row = document.createElement('tr');
+                    const dateCell = document.createElement('td');
+                    dateCell.textContent = day.date;
+                    
+                    const condCell = document.createElement('td');
+                    condCell.style.textAlign = 'center';
+                    const img = document.createElement('img');
+                    img.src = `https://openweathermap.org/img/wn/${encodeURIComponent(day.icon)}.png`;
+                    img.alt = day.description;
+                    condCell.appendChild(img);
+                    condCell.appendChild(document.createElement('br'));
+                    condCell.appendChild(document.createTextNode(day.description));
+                    
+                    const tempCell = document.createElement('td');
+                    tempCell.style.textAlign = 'center';
+                    tempCell.textContent = `${Math.round(day.temp_max)}° / ${Math.round(day.temp_min)}°`;
+                    
+                    row.append(dateCell, condCell, tempCell);
+                    forecastBody.appendChild(row);
+                });
+
+            } catch (err) {
+                console.error('Error fetching weather:', err);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = 'Failed to load weather data. Please try again later.';
+            }
+        }
+
+        // Fetch weather data when page loads
+        document.addEventListener('DOMContentLoaded', fetchWeather);
+    </script>
+</body>
+</html>

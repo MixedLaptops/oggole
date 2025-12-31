@@ -579,9 +579,16 @@ nginx/ssl/*.pem
 nginx/ssl/*.key
 nginx/ssl/*.crt
 .env
+crawler-local/.env
 docker-compose.override.yml
 
 # Database files (SQLite)
 *.db
 *.db-shm
 *.db-wal
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

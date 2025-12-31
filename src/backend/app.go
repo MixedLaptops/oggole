@@ -7,13 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"whoknows/utils"
 
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -31,6 +34,40 @@ type Page struct {
 	LastUpdated string `json:"last_updated"`
 	Content     string `json:"content"`
 }
+
+// Weather cache structure
+type WeatherCache struct {
+	Data      WeatherResponse
+	ExpiresAt time.Time
+	mu        sync.RWMutex
+}
+
+// Weather API response structures
+type WeatherResponse struct {
+	Location    string          `json:"location"`
+	Current     CurrentWeather  `json:"current"`
+	Forecast    []DailyForecast `json:"forecast"`
+	LastUpdated string          `json:"last_updated"`
+}
+
+type CurrentWeather struct {
+	Temp        float64 `json:"temp"`
+	FeelsLike   float64 `json:"feels_like"`
+	Description string  `json:"description"`
+	Icon        string  `json:"icon"`
+	Humidity    int     `json:"humidity"`
+	WindSpeed   float64 `json:"wind_speed"`
+}
+
+type DailyForecast struct {
+	Date        string  `json:"date"`
+	TempMax     float64 `json:"temp_max"`
+	TempMin     float64 `json:"temp_min"`
+	Description string  `json:"description"`
+	Icon        string  `json:"icon"`
+}
+
+var weatherCache = &WeatherCache{}
 
 // generateToken creates a cryptographically secure random session token
 func generateToken() (string, error) {
@@ -96,7 +133,56 @@ func validateSession(r *http.Request) (string, error) {
 	return username, err
 }
 
+// performSearch executes a search query and returns matching pages
+func performSearch(query, language string) ([]Page, error) {
+	pages := make([]Page, 0)
+
+	if query == "" {
+		return pages, nil
+	}
+
+	// Track search query
+	searchQueries.Inc()
+
+	// Use simple ILIKE search for partial matching
+	searchPattern := "%" + query + "%"
+	rows, err := db.Query(`
+		SELECT title, url, language, last_updated, content
+		FROM pages
+		WHERE language = $1
+		  AND (title ILIKE $2 OR content ILIKE $2)
+		ORDER BY
+		  CASE WHEN title ILIKE $2 THEN 1 ELSE 2 END,
+		  title
+		LIMIT 50
+	`, language, searchPattern)
+
+	if err != nil {
+		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
+		databaseErrors.Inc()
+		return pages, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var page Page
+		if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
+			log.Printf("Search row scan failed: error=%v", err)
+			continue
+		}
+		pages = append(pages, page)
+	}
+
+	// Track search result count for quality monitoring
+	searchResultsCount.Observe(float64(len(pages)))
+
+	return pages, nil
+}
+
 func main() {
+	// Load .env file
+	_ = godotenv.Load()
+
 	// Check for CLI commands
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -113,6 +199,11 @@ func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	// Verify CRAWLER_API_KEY is set
+	if os.Getenv("CRAWLER_API_KEY") == "" {
+		log.Fatal("CRAWLER_API_KEY environment variable is required")
 	}
 
 	// Initialiser database forbindelse
@@ -139,6 +230,7 @@ func main() {
 	http.HandleFunc("/api/register", register)
 	http.HandleFunc("/api/logout", logout)
 	http.HandleFunc("/api/weather", weather)
+	http.HandleFunc("/api/batch-pages", batchPages)
 	http.HandleFunc("/login", login1)
 	http.HandleFunc("/weather", weather1)
 	http.HandleFunc("/register", register1)
@@ -156,6 +248,7 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
+	start := time.Now()
 	httpRequestsTotal.Inc()
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
@@ -163,32 +256,21 @@ func search(response http.ResponseWriter, request *http.Request) {
 		language = "en"
 	}
 
-	var pages []Page
-
-	if query != "" {
-		// Track search query
-		searchQueries.Inc()
-
-		rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
-		if err != nil {
-			log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
-			http.Error(response, "Search failed", http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var page Page
-			if err := rows.Scan(&page.Title, &page.URL, &page.Language, &page.LastUpdated, &page.Content); err != nil {
-				log.Printf("Search row scan failed: error=%v", err)
-				continue
-			}
-			pages = append(pages, page)
-		}
+	pages, err := performSearch(query, language)
+	if err != nil {
+		httpErrorsByCode.WithLabelValues("5xx").Inc()
+		http.Error(response, "Search failed", http.StatusInternalServerError)
+		duration := time.Since(start).Milliseconds()
+		requestDuration.Observe(float64(duration))
+		return
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(pages)
+
+	// Track request duration
+	duration := time.Since(start).Milliseconds()
+	requestDuration.Observe(float64(duration))
 }
 
 func login(w http.ResponseWriter, r *http.Request){
@@ -237,9 +319,6 @@ func login(w http.ResponseWriter, r *http.Request){
 		// Log uniform message to prevent username enumeration
 		log.Printf("Login failed: ip=%s reason=authentication_failed", clientIP)
 
-		// Track failed login attempt
-		loginAttempts.WithLabelValues("failure").Inc()
-
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -274,10 +353,6 @@ func login(w http.ResponseWriter, r *http.Request){
 
 	// Successful login
 	log.Printf("Login success: username=%s ip=%s", username, clientIP)
-
-	// Track metrics
-	loginAttempts.WithLabelValues("success").Inc()
-	activeSessions.Inc()
 
 	// Set secure session cookie
 	setSessionCookie(w, token)
@@ -405,8 +480,6 @@ func logout(w http.ResponseWriter, r *http.Request){
 		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
 	} else {
 		log.Printf("Logout success: ip=%s", clientIP)
-		// Track successful logout
-		activeSessions.Dec()
 	}
 
 	// Clear session cookie
@@ -424,9 +497,180 @@ func logout(w http.ResponseWriter, r *http.Request){
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-func weather(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "weather")
-	return
+func weather(w http.ResponseWriter, r *http.Request) {
+	// Check cache first
+	weatherCache.mu.RLock()
+	if time.Now().Before(weatherCache.ExpiresAt) && weatherCache.Data.Location != "" {
+		data := weatherCache.Data
+		weatherCache.mu.RUnlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+		return
+	}
+	weatherCache.mu.RUnlock()
+
+	// Fetch fresh data if no cache exist
+	apiKey := os.Getenv("OPENWEATHER_API_KEY")
+	if apiKey == "" {
+		http.Error(w, "Weather service not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	lat := r.URL.Query().Get("lat")
+	lon := r.URL.Query().Get("lon")
+	if lat == "" || lon == "" {
+		lat = "55.6761"  // Copenhagen
+		lon = "12.5683"
+	}
+
+	weatherData, err := fetchWeatherFromAPI(apiKey, lat, lon)
+	if err != nil {
+		log.Printf("Failed to fetch weather: %v", err)
+		http.Error(w, "Failed to fetch weather data", http.StatusInternalServerError)
+		return
+	}
+
+	// Update cache, expires after 15 min
+	weatherCache.mu.Lock()
+	weatherCache.Data = weatherData
+	weatherCache.ExpiresAt = time.Now().Add(15 * time.Minute)
+	weatherCache.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(weatherData)
+}
+
+func fetchWeatherFromAPI(apiKey, lat, lon string) (WeatherResponse, error) {
+	// Create HTTP client with timeout to avoid hanging requests
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// Fetch current weather
+	currentURL := fmt.Sprintf("https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s", lat, lon, apiKey)
+	currentResp, err := client.Get(currentURL)
+	if err != nil {
+		return WeatherResponse{}, err
+	}
+	defer currentResp.Body.Close()
+
+	if currentResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(currentResp.Body)
+		return WeatherResponse{}, fmt.Errorf("current weather API error: %s - %s", currentResp.Status, string(body))
+	}
+
+	var current struct {
+		Name  string `json:"name"`
+		Coord struct {
+			Lat float64 `json:"lat"`
+			Lon float64 `json:"lon"`
+		} `json:"coord"`
+		Main struct {
+			Temp      float64 `json:"temp"`
+			FeelsLike float64 `json:"feels_like"`
+			Humidity  int     `json:"humidity"`
+		} `json:"main"`
+		Wind struct {
+			Speed float64 `json:"speed"`
+		} `json:"wind"`
+		Weather []struct {
+			Description string `json:"description"`
+			Icon        string `json:"icon"`
+		} `json:"weather"`
+	}
+
+	if err := json.NewDecoder(currentResp.Body).Decode(&current); err != nil {
+		return WeatherResponse{}, err
+	}
+
+	// Fetch 5 day forecast
+	forecastURL := fmt.Sprintf("https://api.openweathermap.org/data/2.5/forecast?lat=%s&lon=%s&units=metric&appid=%s", lat, lon, apiKey)
+	forecastResp, err := client.Get(forecastURL)
+	if err != nil {
+		return WeatherResponse{}, err
+	}
+	defer forecastResp.Body.Close()
+
+	if forecastResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(forecastResp.Body)
+		return WeatherResponse{}, fmt.Errorf("forecast API error: %s - %s", forecastResp.Status, string(body))
+	}
+
+	var forecast struct {
+		List []struct {
+			Dt   int64 `json:"dt"`
+			Main struct {
+				TempMax float64 `json:"temp_max"`
+				TempMin float64 `json:"temp_min"`
+			} `json:"main"`
+			Weather []struct {
+				Description string `json:"description"`
+				Icon        string `json:"icon"`
+			} `json:"weather"`
+		} `json:"list"`
+	}
+
+	if err := json.NewDecoder(forecastResp.Body).Decode(&forecast); err != nil {
+		return WeatherResponse{}, err
+	}
+
+	// Transform to our response format
+	location := current.Name
+	if location == "" {
+		location = fmt.Sprintf("%.2f, %.2f", current.Coord.Lat, current.Coord.Lon)
+	}
+
+	weatherResp := WeatherResponse{
+		Location:    location,
+		LastUpdated: time.Now().Format("2006-01-02 15:04:05"),
+		Current: CurrentWeather{
+			Temp:      current.Main.Temp,
+			FeelsLike: current.Main.FeelsLike,
+			Humidity:  current.Main.Humidity,
+			WindSpeed: current.Wind.Speed,
+		},
+	}
+
+	if len(current.Weather) > 0 {
+		weatherResp.Current.Description = current.Weather[0].Description
+		weatherResp.Current.Icon = current.Weather[0].Icon
+	}
+
+	// Process forecast data - group by day and get min/max temps
+	dailyForecasts := make(map[string]*DailyForecast)
+	var forecastDates []string
+
+	for _, item := range forecast.List {
+		dateStr := time.Unix(item.Dt, 0).Format("2006-01-02")
+		displayDate := time.Unix(item.Dt, 0).Format("Mon, Jan 2")
+
+		if _, exists := dailyForecasts[dateStr]; !exists {
+			forecastDates = append(forecastDates, dateStr)
+			dailyForecasts[dateStr] = &DailyForecast{
+				Date:    displayDate,
+				TempMax: item.Main.TempMax,
+				TempMin: item.Main.TempMin,
+			}
+			if len(item.Weather) > 0 {
+				dailyForecasts[dateStr].Description = item.Weather[0].Description
+				dailyForecasts[dateStr].Icon = item.Weather[0].Icon
+			}
+		} else {
+			// Update min/max temps
+			if item.Main.TempMax > dailyForecasts[dateStr].TempMax {
+				dailyForecasts[dateStr].TempMax = item.Main.TempMax
+			}
+			if item.Main.TempMin < dailyForecasts[dateStr].TempMin {
+				dailyForecasts[dateStr].TempMin = item.Main.TempMin
+			}
+		}
+	}
+
+	// Add up to 5 days of forecast (skip today, start from tomorrow)
+	for i := 1; i < len(forecastDates) && len(weatherResp.Forecast) < 5; i++ {
+		weatherResp.Forecast = append(weatherResp.Forecast, *dailyForecasts[forecastDates[i]])
+	}
+
+	return weatherResp, nil
 }
 
 func login1(w http.ResponseWriter, r *http.Request){
@@ -436,9 +680,8 @@ func login1(w http.ResponseWriter, r *http.Request){
 	}
 }
 
-func weather1(w http.ResponseWriter, r *http.Request){
-	fmt.Fprint(w, "weather1")
-	return
+func weather1(w http.ResponseWriter, r *http.Request) {
+	templates.ExecuteTemplate(w, "weather.html", nil)
 }
 
 func register1(w http.ResponseWriter, r *http.Request){
@@ -449,7 +692,24 @@ func register1(w http.ResponseWriter, r *http.Request){
 }
 
 func index(w http.ResponseWriter, r *http.Request){
-	if err := templates.ExecuteTemplate(w, "search.html", nil); err != nil {
+	query := r.URL.Query().Get("q")
+	language := r.URL.Query().Get("language")
+	if language == "" {
+		language = "en"
+	}
+
+	pages, err := performSearch(query, language)
+	if err != nil {
+		http.Error(w, "Search failed", http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]interface{}{
+		"Query":         query,
+		"SearchResults": pages,
+	}
+
+	if err := templates.ExecuteTemplate(w, "search.html", data); err != nil {
 		log.Printf("Template execution failed: template=search.html error=%v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -460,4 +720,82 @@ func about(w http.ResponseWriter, r *http.Request){
 		log.Printf("Template execution failed: template=about.html error=%v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+func batchPages(w http.ResponseWriter, r *http.Request) {
+	// Only POST allowed
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check API key
+	apiKey := r.Header.Get("X-API-Key")
+	expectedKey := os.Getenv("CRAWLER_API_KEY")
+
+	if expectedKey == "" {
+		log.Println("WARNING: CRAWLER_API_KEY not set")
+		http.Error(w, "Service misconfigured", http.StatusInternalServerError)
+		return
+	}
+
+	if apiKey != expectedKey {
+		log.Printf("Unauthorized crawler request from: %s", getClientIP(r))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse JSON
+	var req struct {
+		Pages []Page `json:"pages"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Pages) == 0 {
+		http.Error(w, "No pages provided", http.StatusBadRequest)
+		return
+	}
+
+	// Insert pages
+	success := 0
+	errors := 0
+
+	for _, page := range req.Pages {
+		if page.Title == "" || page.URL == "" || page.Content == "" {
+			errors++
+			continue
+		}
+
+		if page.Language == "" {
+			page.Language = "en"
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO pages (title, url, language, content, last_updated)
+			VALUES ($1, $2, $3, $4, NOW())
+			ON CONFLICT (title)
+			DO UPDATE SET url = EXCLUDED.url, content = EXCLUDED.content, last_updated = NOW()
+		`, page.Title, page.URL, page.Language, page.Content)
+
+		if err != nil {
+			log.Printf("Error inserting page: %v", err)
+			errors++
+		} else {
+			success++
+		}
+	}
+
+	log.Printf("Batch insert: success=%d errors=%d total=%d", success, errors, len(req.Pages))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"inserted": success,
+		"errors":   errors,
+		"total":    len(req.Pages),
+	})
 }
