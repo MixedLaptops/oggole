@@ -42,9 +42,10 @@ jobs:
 
       - name: Deploy to VM
         run: |
-          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST" << "EOF"
+          ssh -i ~/.ssh/ssh_key -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << "EOF"
           cd ~/oggole
           docker-compose pull
+          docker-compose down
           docker-compose up -d
           docker-compose ps
           EOF
