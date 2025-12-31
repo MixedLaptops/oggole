@@ -1,6 +1,9 @@
 # Use official Go image with Alpine Linux
 FROM golang:1.24-alpine
 
+# Create non-root user for security (privilege separation)
+RUN adduser -D appuser
+
 # Set working directory inside container
 WORKDIR /app
 
@@ -13,6 +16,9 @@ COPY src/ .
 
 # Build the application
 RUN go build -o oggole ./backend
+
+# Switch to non-root user
+USER appuser
 
 # Expose the application port
 EXPOSE 8080
