@@ -17,6 +17,9 @@ COPY src/ .
 # Build the application
 RUN go build -o oggole ./backend
 
+# Change ownership so non-root user can execute
+RUN chown -R appuser:appuser /app
+
 # Switch to non-root user
 USER appuser
 
