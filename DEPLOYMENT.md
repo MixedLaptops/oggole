@@ -55,8 +55,9 @@ scp nginx/nginx.conf user@your-vm:~/oggole/nginx/
 ssh user@your-vm 'chmod +x ~/oggole/deploy.sh'
 ```
 
-### 2. VM: Set PostgreSQL Password (Optional)
+### 2. VM: Set Required Environment Variables
 
+**PostgreSQL Password** (Optional):
 ```bash
 ssh user@your-vm
 echo "export POSTGRES_PASSWORD=your_secure_password" >> ~/.bashrc
@@ -64,6 +65,21 @@ source ~/.bashrc
 ```
 
 If not set, defaults to 'oggole' (fine for development, but use a strong password for production!)
+
+**Required API Keys** (MANDATORY):
+```bash
+ssh user@your-vm
+
+# Generate and set Crawler API Key (for serverless function authentication)
+echo "export CRAWLER_API_KEY=$(openssl rand -base64 32)" >> ~/.bashrc
+
+# Set OpenWeather API Key (get from https://openweathermap.org/api)
+echo "export OPENWEATHER_API_KEY=your_openweather_api_key" >> ~/.bashrc
+
+source ~/.bashrc
+```
+
+⚠️ **CRITICAL**: `CRAWLER_API_KEY` and `OPENWEATHER_API_KEY` must be set before starting the application. The application will fail to start if these are missing.
 
 ### 3. VM: First Deploy
 

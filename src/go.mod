@@ -5,7 +5,6 @@ go 1.24.0
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.20.5
 	golang.org/x/crypto v0.45.0
 )
