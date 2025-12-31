@@ -15,7 +15,7 @@ services:
       - oggole-net
 
   oggole:
-    image: ghcr.io/mixedlaptops/oggole:main
+    image: ghcr.io/mixedlaptops/oggole:latest
     container_name: oggole-app
     expose:
       - "8080"
