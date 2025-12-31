@@ -32,7 +32,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 
@@ -57,6 +57,7 @@ jobs:
 
     env:
       DATABASE_URL: "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+      CRAWLER_API_KEY: "test_api_key_for_e2e"
 
     services:
       postgres:
@@ -67,6 +68,11 @@ jobs:
           POSTGRES_PASSWORD: oggole
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v4
@@ -76,7 +82,7 @@ jobs:
         node-version: lts/*
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 

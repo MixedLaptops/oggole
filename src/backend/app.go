@@ -159,6 +159,7 @@ func performSearch(query, language string) ([]Page, error) {
 
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
+		databaseErrors.Inc()
 		return pages, err
 	}
 	defer rows.Close()
@@ -171,6 +172,9 @@ func performSearch(query, language string) ([]Page, error) {
 		}
 		pages = append(pages, page)
 	}
+
+	// Track search result count for quality monitoring
+	searchResultsCount.Observe(float64(len(pages)))
 
 	return pages, nil
 }
@@ -244,6 +248,7 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
+	start := time.Now()
 	httpRequestsTotal.Inc()
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
@@ -253,12 +258,19 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 	pages, err := performSearch(query, language)
 	if err != nil {
+		httpErrorsByCode.WithLabelValues("5xx").Inc()
 		http.Error(response, "Search failed", http.StatusInternalServerError)
+		duration := time.Since(start).Milliseconds()
+		requestDuration.Observe(float64(duration))
 		return
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(pages)
+
+	// Track request duration
+	duration := time.Since(start).Milliseconds()
+	requestDuration.Observe(float64(duration))
 }
 
 func login(w http.ResponseWriter, r *http.Request){
@@ -307,9 +319,6 @@ func login(w http.ResponseWriter, r *http.Request){
 		// Log uniform message to prevent username enumeration
 		log.Printf("Login failed: ip=%s reason=authentication_failed", clientIP)
 
-		// Track failed login attempt
-		loginAttempts.WithLabelValues("failure").Inc()
-
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -344,10 +353,6 @@ func login(w http.ResponseWriter, r *http.Request){
 
 	// Successful login
 	log.Printf("Login success: username=%s ip=%s", username, clientIP)
-
-	// Track metrics
-	loginAttempts.WithLabelValues("success").Inc()
-	activeSessions.Inc()
 
 	// Set secure session cookie
 	setSessionCookie(w, token)
@@ -475,8 +480,6 @@ func logout(w http.ResponseWriter, r *http.Request){
 		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
 	} else {
 		log.Printf("Logout success: ip=%s", clientIP)
-		// Track successful logout
-		activeSessions.Dec()
 	}
 
 	// Clear session cookie

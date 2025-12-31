@@ -2,12 +2,11 @@ name: Deploy to VM
 
 on:
   workflow_run:
-    workflows: ["Build and Publish Docker Image"]
+    workflows: ["Continuous Delivery"]
     types:
       - completed
     branches:
       - main
-      - master
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
