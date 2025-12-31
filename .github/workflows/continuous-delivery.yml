@@ -44,7 +44,7 @@ jobs:
     - name: Build Go application
       run: |
         cd src
-        go build -o main backend/app.go backend/metrics.go
+        go build -o main ./backend
 
     - name: Initialize database
       env:
@@ -101,7 +101,7 @@ jobs:
     - name: Build Go application
       run: |
         cd src
-        go build -o main backend/app.go backend/metrics.go
+        go build -o main ./backend
 
     - name: Initialize database
       run: |
