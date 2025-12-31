@@ -22,6 +22,9 @@ services:
     environment:
       - DATABASE_URL=postgres://oggole:${POSTGRES_PASSWORD:-oggole}@postgres:5432/oggole?sslmode=disable
       - CRAWLER_API_KEY=${CRAWLER_API_KEY}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+    env_file:
+      - .env
     depends_on:
       - postgres
     restart: unless-stopped
