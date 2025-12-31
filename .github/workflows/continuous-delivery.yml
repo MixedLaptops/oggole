@@ -41,6 +41,18 @@ jobs:
         cd src
         go mod tidy
 
+    - name: Build Go application
+      run: |
+        cd src
+        go build -o main ./backend
+
+    - name: Initialize database
+      env:
+        DATABASE_URL: "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
+      run: |
+        cd src
+        ./main init-db
+
     - name: Run Go integration tests with PostgreSQL
       env:
         DATABASE_URL: "postgres://oggole:oggole@localhost:5432/oggole?sslmode=disable"
@@ -89,7 +101,7 @@ jobs:
     - name: Build Go application
       run: |
         cd src
-        go build -o main backend/app.go backend/metrics.go
+        go build -o main ./backend
 
     - name: Initialize database
       run: |
