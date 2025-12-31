@@ -1,9 +1,13 @@
 import * as cheerio from 'cheerio';
 import { URL } from 'url';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // ============= CONFIGURATION - EDIT THESE =============
 const START_URL = 'https://en.wikipedia.org/wiki/DevOps';
-const MAX_PAGES = 10;
+const MAX_PAGES = 20;  // Increased to get more search content
 const DELAY_MS = 1000;
 const TIMEOUT_MS = 10000;  // 10 second timeout for all fetch requests
 
