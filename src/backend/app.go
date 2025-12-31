@@ -11,15 +11,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 	"whoknows/utils"
 
 	"github.com/joho/godotenv"
-	"strings"
-	"time"
-	"whoknows/utils"
-
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -138,7 +135,7 @@ func validateSession(r *http.Request) (string, error) {
 
 // performSearch executes a search query and returns matching pages
 func performSearch(query, language string) ([]Page, error) {
-	var pages []Page
+	pages := make([]Page, 0)
 
 	if query == "" {
 		return pages, nil
@@ -147,10 +144,23 @@ func performSearch(query, language string) ([]Page, error) {
 	// Track search query
 	searchQueries.Inc()
 
-	rows, err := db.Query("SELECT title, url, language, last_updated, content FROM pages WHERE language = $1 AND content ILIKE $2", language, "%"+query+"%")
+	// Use simple ILIKE search for partial matching
+	searchPattern := "%" + query + "%"
+	rows, err := db.Query(`
+		SELECT title, url, language, last_updated, content
+		FROM pages
+		WHERE language = $1
+		  AND (title ILIKE $2 OR content ILIKE $2)
+		ORDER BY
+		  CASE WHEN title ILIKE $2 THEN 1 ELSE 2 END,
+		  title
+		LIMIT 50
+	`, language, searchPattern)
+
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
-		return nil, err
+		databaseErrors.Inc()
+		return pages, err
 	}
 	defer rows.Close()
 
@@ -162,6 +172,9 @@ func performSearch(query, language string) ([]Page, error) {
 		}
 		pages = append(pages, page)
 	}
+
+	// Track search result count for quality monitoring
+	searchResultsCount.Observe(float64(len(pages)))
 
 	return pages, nil
 }
@@ -188,6 +201,11 @@ func main() {
 		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
+	// Verify CRAWLER_API_KEY is set
+	if os.Getenv("CRAWLER_API_KEY") == "" {
+		log.Fatal("CRAWLER_API_KEY environment variable is required")
+	}
+
 	// Initialiser database forbindelse
 	var err error
 	db, err = sql.Open("postgres", dbURL)
@@ -212,6 +230,7 @@ func main() {
 	http.HandleFunc("/api/register", register)
 	http.HandleFunc("/api/logout", logout)
 	http.HandleFunc("/api/weather", weather)
+	http.HandleFunc("/api/batch-pages", batchPages)
 	http.HandleFunc("/login", login1)
 	http.HandleFunc("/weather", weather1)
 	http.HandleFunc("/register", register1)
@@ -229,6 +248,7 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
+	start := time.Now()
 	httpRequestsTotal.Inc()
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
@@ -238,12 +258,19 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 	pages, err := performSearch(query, language)
 	if err != nil {
+		httpErrorsByCode.WithLabelValues("5xx").Inc()
 		http.Error(response, "Search failed", http.StatusInternalServerError)
+		duration := time.Since(start).Milliseconds()
+		requestDuration.Observe(float64(duration))
 		return
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(pages)
+
+	// Track request duration
+	duration := time.Since(start).Milliseconds()
+	requestDuration.Observe(float64(duration))
 }
 
 func login(w http.ResponseWriter, r *http.Request){
@@ -292,9 +319,6 @@ func login(w http.ResponseWriter, r *http.Request){
 		// Log uniform message to prevent username enumeration
 		log.Printf("Login failed: ip=%s reason=authentication_failed", clientIP)
 
-		// Track failed login attempt
-		loginAttempts.WithLabelValues("failure").Inc()
-
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -329,10 +353,6 @@ func login(w http.ResponseWriter, r *http.Request){
 
 	// Successful login
 	log.Printf("Login success: username=%s ip=%s", username, clientIP)
-
-	// Track metrics
-	loginAttempts.WithLabelValues("success").Inc()
-	activeSessions.Inc()
 
 	// Set secure session cookie
 	setSessionCookie(w, token)
@@ -460,8 +480,6 @@ func logout(w http.ResponseWriter, r *http.Request){
 		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
 	} else {
 		log.Printf("Logout success: ip=%s", clientIP)
-		// Track successful logout
-		activeSessions.Dec()
 	}
 
 	// Clear session cookie
@@ -702,4 +720,82 @@ func about(w http.ResponseWriter, r *http.Request){
 		log.Printf("Template execution failed: template=about.html error=%v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+func batchPages(w http.ResponseWriter, r *http.Request) {
+	// Only POST allowed
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check API key
+	apiKey := r.Header.Get("X-API-Key")
+	expectedKey := os.Getenv("CRAWLER_API_KEY")
+
+	if expectedKey == "" {
+		log.Println("WARNING: CRAWLER_API_KEY not set")
+		http.Error(w, "Service misconfigured", http.StatusInternalServerError)
+		return
+	}
+
+	if apiKey != expectedKey {
+		log.Printf("Unauthorized crawler request from: %s", getClientIP(r))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse JSON
+	var req struct {
+		Pages []Page `json:"pages"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Pages) == 0 {
+		http.Error(w, "No pages provided", http.StatusBadRequest)
+		return
+	}
+
+	// Insert pages
+	success := 0
+	errors := 0
+
+	for _, page := range req.Pages {
+		if page.Title == "" || page.URL == "" || page.Content == "" {
+			errors++
+			continue
+		}
+
+		if page.Language == "" {
+			page.Language = "en"
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO pages (title, url, language, content, last_updated)
+			VALUES ($1, $2, $3, $4, NOW())
+			ON CONFLICT (title)
+			DO UPDATE SET url = EXCLUDED.url, content = EXCLUDED.content, last_updated = NOW()
+		`, page.Title, page.URL, page.Language, page.Content)
+
+		if err != nil {
+			log.Printf("Error inserting page: %v", err)
+			errors++
+		} else {
+			success++
+		}
+	}
+
+	log.Printf("Batch insert: success=%d errors=%d total=%d", success, errors, len(req.Pages))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"inserted": success,
+		"errors":   errors,
+		"total":    len(req.Pages),
+	})
 }

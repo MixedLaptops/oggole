@@ -1,0 +1,26 @@
+{
+  "name": "oggole",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MixedLaptops/oggole.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/MixedLaptops/oggole/issues"
+  },
+  "homepage": "https://github.com/MixedLaptops/oggole#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
