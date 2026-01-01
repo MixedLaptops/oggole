@@ -173,8 +173,10 @@ func performSearch(query, language string) ([]Page, error) {
 		pages = append(pages, page)
 	}
 
-	// Track search result count for quality monitoring
-	searchResultsCount.Observe(float64(len(pages)))
+	// Track zero results for quality monitoring
+	if len(pages) == 0 {
+		searchZeroResults.Inc()
+	}
 
 	return pages, nil
 }
@@ -241,6 +243,9 @@ func main() {
 	// Prometheus metrics endpoint
 	http.Handle("/metrics", promhttp.Handler())
 
+	// Mark service as up
+	serviceUp.Set(1)
+
 	log.Println("Starting server on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
@@ -248,8 +253,8 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
-	start := time.Now()
-	httpRequestsTotal.Inc()
+	httpRequestsTotal.WithLabelValues("/search", "200").Inc()
+
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
 	if language == "" {
@@ -258,19 +263,13 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 	pages, err := performSearch(query, language)
 	if err != nil {
-		httpErrorsByCode.WithLabelValues("5xx").Inc()
+		httpRequestsTotal.WithLabelValues("/search", "500").Inc()
 		http.Error(response, "Search failed", http.StatusInternalServerError)
-		duration := time.Since(start).Milliseconds()
-		requestDuration.Observe(float64(duration))
 		return
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(pages)
-
-	// Track request duration
-	duration := time.Since(start).Milliseconds()
-	requestDuration.Observe(float64(duration))
 }
 
 func login(w http.ResponseWriter, r *http.Request){
@@ -788,6 +787,9 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 			success++
 		}
 	}
+
+	// Track pages indexed
+	pagesIndexed.Add(float64(success))
 
 	log.Printf("Batch insert: success=%d errors=%d total=%d", success, errors, len(req.Pages))
 
