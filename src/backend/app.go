@@ -791,6 +791,12 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 	// Track pages indexed
 	pagesIndexed.Add(float64(success))
 
+	// Update total pages count
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM pages").Scan(&count); err == nil {
+		totalPages.Set(float64(count))
+	}
+
 	log.Printf("Batch insert: success=%d errors=%d total=%d", success, errors, len(req.Pages))
 
 	w.Header().Set("Content-Type", "application/json")
