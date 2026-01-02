@@ -147,11 +147,29 @@ func getTextSearchConfig(language string) string {
 	}
 }
 
+// validateSearchQuery checks if the search query is valid
+// Returns an error if the query is too long or contains invalid characters
+func validateSearchQuery(query string) error {
+	const maxQueryLength = 200
+
+	if len(query) > maxQueryLength {
+		return fmt.Errorf("search query too long: maximum %d characters allowed", maxQueryLength)
+	}
+
+	return nil
+}
+
 func performSearch(query, language string) ([]Page, error) {
 	pages := make([]Page, 0)
 
 	if query == "" {
 		return pages, nil
+	}
+
+	// Validate search query
+	if err := validateSearchQuery(query); err != nil {
+		log.Printf("Invalid search query: query=%s error=%v", query, err)
+		return pages, err
 	}
 
 	// Track search query
@@ -272,8 +290,6 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
-	httpRequestsTotal.WithLabelValues("/search", "200").Inc()
-
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
 	if language == "" {
@@ -282,11 +298,20 @@ func search(response http.ResponseWriter, request *http.Request) {
 
 	pages, err := performSearch(query, language)
 	if err != nil {
+		// Check if it's a validation error (query too long)
+		if strings.Contains(err.Error(), "too long") {
+			httpRequestsTotal.WithLabelValues("/search", "400").Inc()
+			http.Error(response, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Database or other internal errors
 		httpRequestsTotal.WithLabelValues("/search", "500").Inc()
 		http.Error(response, "Search failed", http.StatusInternalServerError)
 		return
 	}
 
+	httpRequestsTotal.WithLabelValues("/search", "200").Inc()
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(pages)
 }
