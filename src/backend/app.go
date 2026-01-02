@@ -788,19 +788,16 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 		if page.Language == "" {
 			page.Language = "en"
 		}
-		// Get tsconfig for tsvector (whitelisted value)
-		tsConfig := getTextSearchConfig(page.Language)
-		// Insert or update page with proper tsvector
 		_, err := db.Exec(`
-			INSERT INTO pages (title, url, language, content, last_updated, content_tsv)
-			VALUES ($1, $2, $3, $4, NOW(), to_tsvector($5, $4))
-			ON CONFLICT (title)
-			DO UPDATE SET
-				url = EXCLUDED.url,
-				content = EXCLUDED.content,
-				last_updated = NOW(),
-				content_tsv = to_tsvector($5, EXCLUDED.content)
-		`, page.Title, page.URL, page.Language, page.Content, tsConfig)
+    	INSERT INTO pages (title, url, language, content, last_updated)
+    	VALUES ($1, $2, $3, $4, NOW())
+    	ON CONFLICT (title)
+    	DO UPDATE SET
+        url = EXCLUDED.url,
+        content = EXCLUDED.content,
+        last_updated = NOW()
+		`, page.Title, page.URL, page.Language, page.Content)
+
 		if err != nil {
 			log.Printf("Error inserting page '%s': %v", page.Title, err)
 			errors++
