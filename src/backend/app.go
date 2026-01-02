@@ -133,6 +133,20 @@ func validateSession(r *http.Request) (string, error) {
 	return username, err
 }
 
+// getTextSearchConfig maps and validates language codes to PostgreSQL text search configs
+// Whitelisted values prevent SQL injection when building dynamic queries
+// NOTE: This mapping must match the CASE statement in init_db.go's update_content_tsv() trigger
+func getTextSearchConfig(language string) string {
+	switch language {
+	case "en":
+		return "english"
+	case "da":
+		return "danish"
+	default:
+		return "english" // Safe fallback
+	}
+}
+
 // performSearch executes a search query and returns matching pages
 func performSearch(query, language string) ([]Page, error) {
 	pages := make([]Page, 0)
@@ -144,18 +158,24 @@ func performSearch(query, language string) ([]Page, error) {
 	// Track search query
 	searchQueries.Inc()
 
-	// Use simple ILIKE search for partial matching
+	// Validate and map language to PostgreSQL text search config
+	tsConfig := getTextSearchConfig(language)
+
+	// Hybrid search: full-text search (fast) + ILIKE fallback (partial matching)
+	// Note: tsConfig is validated/whitelisted, safe to inject into query string
 	searchPattern := "%" + query + "%"
-	rows, err := db.Query(`
+	sqlQuery := fmt.Sprintf(`
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (title ILIKE $2 OR content ILIKE $2)
-		ORDER BY
-		  CASE WHEN title ILIKE $2 THEN 1 ELSE 2 END,
-		  title
+		  AND (content_tsv @@ plainto_tsquery('%s', $2)
+		       OR title ILIKE $3
+		       OR content ILIKE $3)
+		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s', $2)) DESC
 		LIMIT 50
-	`, language, searchPattern)
+	`, tsConfig, tsConfig)
+
+	rows, err := db.Query(sqlQuery, language, query, searchPattern)
 
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
