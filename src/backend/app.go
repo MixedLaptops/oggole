@@ -144,18 +144,18 @@ func performSearch(query, language string) ([]Page, error) {
 	// Track search query
 	searchQueries.Inc()
 
-	// Use simple ILIKE search for partial matching
+	// Hybrid search: full-text search (fast) + ILIKE fallback (partial matching)
 	searchPattern := "%" + query + "%"
 	rows, err := db.Query(`
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (title ILIKE $2 OR content ILIKE $2)
-		ORDER BY
-		  CASE WHEN title ILIKE $2 THEN 1 ELSE 2 END,
-		  title
+		  AND (content_tsv @@ plainto_tsquery('english', $2)
+		       OR title ILIKE $3
+		       OR content ILIKE $3)
+		ORDER BY ts_rank(content_tsv, plainto_tsquery('english', $2)) DESC
 		LIMIT 50
-	`, language, searchPattern)
+	`, language, query, searchPattern)
 
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)

@@ -99,10 +99,40 @@ func InitDB() {
 		url TEXT NOT NULL UNIQUE,
 		language TEXT NOT NULL CHECK(language IN ('en', 'da')) DEFAULT 'en',
 		last_updated TIMESTAMP DEFAULT NOW(),
-		content TEXT NOT NULL
+		content TEXT NOT NULL,
+		content_tsv tsvector
 	);`
 
 	_, err = db.Exec(pagesSchema)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create GIN index for full-text search
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS content_tsv_idx ON pages USING GIN(content_tsv);`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create trigger function to auto-update tsvector
+	_, err = db.Exec(`
+		CREATE OR REPLACE FUNCTION update_content_tsv() RETURNS trigger AS $$
+		BEGIN
+			NEW.content_tsv := to_tsvector('english', NEW.content);
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+	`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create trigger
+	_, err = db.Exec(`
+		DROP TRIGGER IF EXISTS tsvector_update ON pages;
+		CREATE TRIGGER tsvector_update BEFORE INSERT OR UPDATE
+		ON pages FOR EACH ROW EXECUTE FUNCTION update_content_tsv();
+	`)
 	if err != nil {
 		log.Fatal(err)
 	}
