@@ -213,6 +213,9 @@ func main() {
 		case "seed-data":
 			utils.SeedData()
 			return
+		case "migration":
+			utils.Migration()
+			return
 		}
 	}
 
