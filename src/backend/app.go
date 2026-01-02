@@ -168,10 +168,10 @@ func performSearch(query, language string) ([]Page, error) {
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (content_tsv @@ plainto_tsquery('%s', $2)
+		  AND (content_tsv @@ plainto_tsquery('%s'::regconfig, $2)
 		       OR title ILIKE $3
 		       OR content ILIKE $3)
-		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s', $2)) DESC
+		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s'::regconfig, $2)) DESC
 		LIMIT 50
 	`, tsConfig, tsConfig)
 	rows, err := db.Query(sqlQuery, language, query, searchPattern)
