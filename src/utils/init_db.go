@@ -115,10 +115,19 @@ func InitDB() {
 	}
 
 	// Create trigger function to auto-update tsvector
+	// NOTE: Maps language codes to PostgreSQL text search configs
+	// This must match the mapping in app.go's getTextSearchConfig() function
 	_, err = db.Exec(`
 		CREATE OR REPLACE FUNCTION update_content_tsv() RETURNS trigger AS $$
 		BEGIN
-			NEW.content_tsv := to_tsvector('english', NEW.content);
+			NEW.content_tsv := to_tsvector(
+				CASE NEW.language
+					WHEN 'en' THEN 'english'::regconfig
+					WHEN 'da' THEN 'danish'::regconfig
+					ELSE 'english'::regconfig
+				END,
+				NEW.content
+			);
 			RETURN NEW;
 		END;
 		$$ LANGUAGE plpgsql;
