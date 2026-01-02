@@ -83,14 +83,14 @@ func Migration() {
 		log.Fatalf("Failed to populate tsvector: %v", err)
 	}
 
-	// Create GIN index
-	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS content_tsv_idx ON pages USING GIN(content_tsv);`)
-	if err != nil {
-		log.Fatalf("Failed to create GIN index: %v", err)
-	}
-
 	if err = tx.Commit(); err != nil {
 		log.Fatalf("Failed to commit transaction: %v", err)
+	}
+
+	// Create GIN index concurrently (must be outside transaction)
+	_, err = db.Exec(`CREATE INDEX CONCURRENTLY IF NOT EXISTS content_tsv_idx ON pages USING GIN(content_tsv);`)
+	if err != nil {
+		log.Fatalf("Failed to create GIN index: %v", err)
 	}
 
 	log.Println("Migration completed successfully")
