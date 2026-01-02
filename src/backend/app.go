@@ -788,8 +788,6 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 		if page.Language == "" {
 			page.Language = "en"
 		}
-		// Get tsconfig for tsvector (whitelisted value)
-		tsConfig := getTextSearchConfig(page.Language)
 		_, err := db.Exec(`
     	INSERT INTO pages (title, url, language, content, last_updated)
     	VALUES ($1, $2, $3, $4, NOW())
