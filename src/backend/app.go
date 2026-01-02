@@ -147,7 +147,6 @@ func getTextSearchConfig(language string) string {
 	}
 }
 
-// performSearch executes a search query and returns matching pages
 func performSearch(query, language string) ([]Page, error) {
 	pages := make([]Page, 0)
 
@@ -161,22 +160,18 @@ func performSearch(query, language string) ([]Page, error) {
 	// Validate and map language to PostgreSQL text search config
 	tsConfig := getTextSearchConfig(language)
 
-	// Hybrid search: full-text search (fast) + ILIKE fallback (partial matching)
-	// Note: tsConfig is validated/whitelisted, safe to inject into query string
 	searchPattern := "%" + query + "%"
-	sqlQuery := fmt.Sprintf(`
+	sqlQuery := `
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (content_tsv @@ plainto_tsquery('%s', $2)
-		       OR title ILIKE $3
-		       OR content ILIKE $3)
-		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s', $2)) DESC
+		  AND (content_tsv @@ plainto_tsquery($2::regconfig, $3)
+		       OR title ILIKE $4
+		       OR content ILIKE $4)
+		ORDER BY ts_rank(content_tsv, plainto_tsquery($2::regconfig, $3)) DESC
 		LIMIT 50
-	`, tsConfig, tsConfig)
-
-	rows, err := db.Query(sqlQuery, language, query, searchPattern)
-
+	`
+	rows, err := db.Query(sqlQuery, language, tsConfig, query, searchPattern)
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
 		databaseErrors.Inc()
@@ -200,6 +195,7 @@ func performSearch(query, language string) ([]Page, error) {
 
 	return pages, nil
 }
+
 
 func main() {
 	// Load .env file
@@ -779,39 +775,43 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert pages
 	success := 0
 	errors := 0
 
 	for _, page := range req.Pages {
+		// Validate required fields
 		if page.Title == "" || page.URL == "" || page.Content == "" {
 			errors++
 			continue
 		}
-
+		// Default language to "en" if missing
 		if page.Language == "" {
 			page.Language = "en"
 		}
-
+		// Get tsconfig for tsvector (whitelisted value)
+		tsConfig := getTextSearchConfig(page.Language)
+		// Insert or update page with proper tsvector
 		_, err := db.Exec(`
-			INSERT INTO pages (title, url, language, content, last_updated)
-			VALUES ($1, $2, $3, $4, NOW())
+			INSERT INTO pages (title, url, language, content, last_updated, content_tsv)
+			VALUES ($1, $2, $3, $4, NOW(), to_tsvector($5, $4))
 			ON CONFLICT (title)
-			DO UPDATE SET url = EXCLUDED.url, content = EXCLUDED.content, last_updated = NOW()
-		`, page.Title, page.URL, page.Language, page.Content)
-
+			DO UPDATE SET
+				url = EXCLUDED.url,
+				content = EXCLUDED.content,
+				last_updated = NOW(),
+				content_tsv = to_tsvector($5, EXCLUDED.content)
+		`, page.Title, page.URL, page.Language, page.Content, tsConfig)
 		if err != nil {
-			log.Printf("Error inserting page: %v", err)
+			log.Printf("Error inserting page '%s': %v", page.Title, err)
 			errors++
 		} else {
 			success++
 		}
 	}
 
-	// Track pages indexed
+	// Update Prometheus metrics
 	pagesIndexed.Add(float64(success))
 
-	// Update total pages count
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM pages").Scan(&count); err == nil {
 		totalPages.Set(float64(count))
@@ -827,3 +827,4 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 		"total":    len(req.Pages),
 	})
 }
+
