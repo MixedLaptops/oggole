@@ -158,20 +158,23 @@ func performSearch(query, language string) ([]Page, error) {
 	searchQueries.Inc()
 
 	// Validate and map language to PostgreSQL text search config
+	// Safe to inject as literal since getTextSearchConfig() whitelists values
 	tsConfig := getTextSearchConfig(language)
 
 	searchPattern := "%" + query + "%"
-	sqlQuery := `
+	// Build query with tsconfig as literal (not parameter) since PostgreSQL
+	// doesn't support parameterized regconfig values
+	sqlQuery := fmt.Sprintf(`
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (content_tsv @@ plainto_tsquery($2::regconfig, $3)
-		       OR title ILIKE $4
-		       OR content ILIKE $4)
-		ORDER BY ts_rank(content_tsv, plainto_tsquery($2::regconfig, $3)) DESC
+		  AND (content_tsv @@ plainto_tsquery('%s', $2)
+		       OR title ILIKE $3
+		       OR content ILIKE $3)
+		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s', $2)) DESC
 		LIMIT 50
-	`
-	rows, err := db.Query(sqlQuery, language, tsConfig, query, searchPattern)
+	`, tsConfig, tsConfig)
+	rows, err := db.Query(sqlQuery, language, query, searchPattern)
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
 		databaseErrors.Inc()
