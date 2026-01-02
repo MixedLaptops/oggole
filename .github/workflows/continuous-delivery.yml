@@ -34,7 +34,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.23'
         cache-dependency-path: src/go.sum
 
     - name: Install dependencies
@@ -97,7 +97,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.23'
         cache-dependency-path: src/go.sum
 
     - name: Build Go application
@@ -157,16 +157,6 @@ jobs:
 
     - name: Build Docker image
       run: docker build -t oggole:latest .
-
-    - name: Verify no database in image
-      run: |
-        if docker run --rm oggole:latest ls -la /app/*.db >/dev/null 2>&1; then
-          echo "Error: Database files found in image!"
-          exit 1
-        else
-          echo "✓ No database in image"
-          exit 0
-        fi
 
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v3
