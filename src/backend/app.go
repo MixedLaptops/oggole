@@ -160,23 +160,18 @@ func performSearch(query, language string) ([]Page, error) {
 	// Validate and map language to PostgreSQL text search config
 	tsConfig := getTextSearchConfig(language)
 
-	// Escape single quotes in the search query to safely inline into SQL
-	safeQuery := strings.ReplaceAll(query, "'", "''")
 	searchPattern := "%" + query + "%"
-
-	// Full-text search query with ILIKE fallback
-	sqlQuery := fmt.Sprintf(`
+	sqlQuery := `
 		SELECT title, url, language, last_updated, content
 		FROM pages
 		WHERE language = $1
-		  AND (content_tsv @@ plainto_tsquery('%s', '%s')
-		       OR title ILIKE $2
-		       OR content ILIKE $2)
-		ORDER BY ts_rank(content_tsv, plainto_tsquery('%s', '%s')) DESC
+		  AND (content_tsv @@ plainto_tsquery($2::regconfig, $3)
+		       OR title ILIKE $4
+		       OR content ILIKE $4)
+		ORDER BY ts_rank(content_tsv, plainto_tsquery($2::regconfig, $3)) DESC
 		LIMIT 50
-	`, tsConfig, safeQuery, tsConfig, safeQuery)
-
-	rows, err := db.Query(sqlQuery, language, searchPattern)
+	`
+	rows, err := db.Query(sqlQuery, language, tsConfig, query, searchPattern)
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
 		databaseErrors.Inc()
@@ -789,22 +784,23 @@ func batchPages(w http.ResponseWriter, r *http.Request) {
 			errors++
 			continue
 		}
-
-		// Default language to "en" if missing or invalid
-		page.Language = getTextSearchConfig(page.Language)
-
+		// Default language to "en" if missing
+		if page.Language == "" {
+			page.Language = "en"
+		}
+		// Get tsconfig for tsvector (whitelisted value)
+		tsConfig := getTextSearchConfig(page.Language)
 		// Insert or update page with proper tsvector
 		_, err := db.Exec(`
 			INSERT INTO pages (title, url, language, content, last_updated, content_tsv)
-			VALUES ($1, $2, $3, $4, NOW(), to_tsvector($3, $4))
+			VALUES ($1, $2, $3, $4, NOW(), to_tsvector($5, $4))
 			ON CONFLICT (title)
 			DO UPDATE SET
 				url = EXCLUDED.url,
 				content = EXCLUDED.content,
 				last_updated = NOW(),
-				content_tsv = to_tsvector(EXCLUDED.language, EXCLUDED.content)
-		`, page.Title, page.URL, page.Language, page.Content)
-
+				content_tsv = to_tsvector($5, EXCLUDED.content)
+		`, page.Title, page.URL, page.Language, page.Content, tsConfig)
 		if err != nil {
 			log.Printf("Error inserting page '%s': %v", page.Title, err)
 			errors++
