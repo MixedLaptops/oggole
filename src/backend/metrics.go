@@ -14,7 +14,7 @@ var (
 		Help: "Total HTTP requests by endpoint and status",
 	}, []string{"endpoint", "status"})
 
-	// Feature health metrics
+	// Feature health metrics - Search tracking
 
 	// searchQueries counts total search queries
 	searchQueries = promauto.NewCounter(prometheus.CounterOpts{
@@ -26,6 +26,19 @@ var (
 	searchZeroResults = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "oggole_search_zero_results_total",
 		Help: "Searches returning zero results",
+	})
+
+	// searchQueryTerms tracks what users search for (top search terms)
+	searchQueryTerms = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "oggole_search_query_terms_total",
+		Help: "Count of each search query term",
+	}, []string{"query"})
+
+	// searchesPerSession tracks distribution of searches per user session
+	searchesPerSession = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "oggole_searches_per_session",
+		Help:    "Distribution of number of searches per user session before leaving",
+		Buckets: []float64{1, 2, 3, 5, 10, 20, 50},
 	})
 
 	// Crawler/Indexing metrics
@@ -43,12 +56,6 @@ var (
 	})
 
 	// Operational metrics
-
-	// databaseErrors tracks database operation failures
-	databaseErrors = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "oggole_database_errors_total",
-		Help: "Total database errors",
-	})
 
 	// serviceUp tracks service health (1=up, 0=down)
 	serviceUp = promauto.NewGauge(prometheus.GaugeOpts{
