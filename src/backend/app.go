@@ -37,6 +37,13 @@ var sessionSearches = &SessionSearchTracker{
 	searches: make(map[string]int),
 }
 
+// Simple top-100 search query tracker to prevent unbounded Prometheus cardinality
+var (
+	trackedQueries   = make(map[string]bool)
+	trackedQueriesMu sync.RWMutex
+	maxTrackedQueries = 100
+)
+
 type Page struct {
 	Title       string `json:"title"`
 	URL         string `json:"url"`
@@ -195,8 +202,27 @@ func performSearch(query, language string) ([]Page, error) {
 	// Track search query
 	searchQueries.Inc()
 
-	// Track what users search for (query terms)
-	searchQueryTerms.WithLabelValues(query).Inc()
+	// Track what users search for (top 100 only to prevent unbounded cardinality)
+	trackedQueriesMu.RLock()
+	alreadyTracked := trackedQueries[query]
+	canTrack := len(trackedQueries) < maxTrackedQueries
+	trackedQueriesMu.RUnlock()
+
+	if alreadyTracked {
+		// Already tracking this query, increment it
+		searchQueryTerms.WithLabelValues(query).Inc()
+	} else if canTrack {
+		// New query and still under cap, start tracking it
+		trackedQueriesMu.Lock()
+		if len(trackedQueries) < maxTrackedQueries { // Double-check after acquiring lock
+			trackedQueries[query] = true
+			trackedQueriesMu.Unlock()
+			searchQueryTerms.WithLabelValues(query).Inc()
+		} else {
+			trackedQueriesMu.Unlock()
+		}
+	}
+	// If over 100 unique queries, silently ignore new ones
 
 	// Validate and map language to PostgreSQL text search config
 	// Safe to inject as literal since getTextSearchConfig() whitelists values
@@ -249,9 +275,6 @@ func main() {
 		switch os.Args[1] {
 		case "init-db":
 			utils.InitDB()
-			return
-		case "seed-data":
-			utils.SeedData()
 			return
 		case "migration":
 			utils.Migration()
