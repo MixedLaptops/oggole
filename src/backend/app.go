@@ -184,12 +184,24 @@ func metricsMiddleware(endpoint string, handler http.HandlerFunc) http.HandlerFu
 // responseWriterWrapper wraps http.ResponseWriter to capture the status code
 type responseWriterWrapper struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode    int
+	headerWritten bool
 }
 
 func (w *responseWriterWrapper) WriteHeader(statusCode int) {
-	w.statusCode = statusCode
-	w.ResponseWriter.WriteHeader(statusCode)
+	if !w.headerWritten {
+		w.statusCode = statusCode
+		w.headerWritten = true
+		w.ResponseWriter.WriteHeader(statusCode)
+	}
+}
+
+func (w *responseWriterWrapper) Write(b []byte) (int, error) {
+	// If WriteHeader hasn't been called yet, call it with 200 to capture the status
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
 }
 
 func performSearch(query, language string) ([]Page, error) {
