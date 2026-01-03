@@ -592,3 +592,6 @@ docker-compose.override.yml
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Claude Code
+.claude/

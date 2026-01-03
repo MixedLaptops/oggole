@@ -27,6 +27,23 @@ import (
 var db *sql.DB
 var templates *template.Template
 
+// Session search tracking for metrics
+type SessionSearchTracker struct {
+	searches map[string]int
+	mu       sync.RWMutex
+}
+
+var sessionSearches = &SessionSearchTracker{
+	searches: make(map[string]int),
+}
+
+// Simple top-100 search query tracker to prevent unbounded Prometheus cardinality
+var (
+	trackedQueries   = make(map[string]bool)
+	trackedQueriesMu sync.RWMutex
+	maxTrackedQueries = 100
+)
+
 type Page struct {
 	Title       string `json:"title"`
 	URL         string `json:"url"`
@@ -147,6 +164,46 @@ func getTextSearchConfig(language string) string {
 	}
 }
 
+// metricsMiddleware wraps HTTP handlers to automatically track endpoint usage
+func metricsMiddleware(endpoint string, handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Create a response writer wrapper to capture status code
+		wrapper := &responseWriterWrapper{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK, // Default to 200 if WriteHeader not called
+		}
+
+		// Call the actual handler
+		handler(wrapper, r)
+
+		// Track the request with actual status code
+		httpRequestsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", wrapper.statusCode)).Inc()
+	}
+}
+
+// responseWriterWrapper wraps http.ResponseWriter to capture the status code
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode    int
+	headerWritten bool
+}
+
+func (w *responseWriterWrapper) WriteHeader(statusCode int) {
+	if !w.headerWritten {
+		w.statusCode = statusCode
+		w.headerWritten = true
+		w.ResponseWriter.WriteHeader(statusCode)
+	}
+}
+
+func (w *responseWriterWrapper) Write(b []byte) (int, error) {
+	// If WriteHeader hasn't been called yet, call it with 200 to capture the status
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
 func performSearch(query, language string) ([]Page, error) {
 	pages := make([]Page, 0)
 
@@ -156,6 +213,28 @@ func performSearch(query, language string) ([]Page, error) {
 
 	// Track search query
 	searchQueries.Inc()
+
+	// Track what users search for (top 100 only to prevent unbounded cardinality)
+	trackedQueriesMu.RLock()
+	alreadyTracked := trackedQueries[query]
+	canTrack := len(trackedQueries) < maxTrackedQueries
+	trackedQueriesMu.RUnlock()
+
+	if alreadyTracked {
+		// Already tracking this query, increment it
+		searchQueryTerms.WithLabelValues(query).Inc()
+	} else if canTrack {
+		// New query and still under cap, start tracking it
+		trackedQueriesMu.Lock()
+		if len(trackedQueries) < maxTrackedQueries { // Double-check after acquiring lock
+			trackedQueries[query] = true
+			trackedQueriesMu.Unlock()
+			searchQueryTerms.WithLabelValues(query).Inc()
+		} else {
+			trackedQueriesMu.Unlock()
+		}
+	}
+	// If over 100 unique queries, silently ignore new ones
 
 	// Validate and map language to PostgreSQL text search config
 	// Safe to inject as literal since getTextSearchConfig() whitelists values
@@ -177,7 +256,6 @@ func performSearch(query, language string) ([]Page, error) {
 	rows, err := db.Query(sqlQuery, language, query, searchPattern)
 	if err != nil {
 		log.Printf("Search query failed: query=%s language=%s error=%v", query, language, err)
-		databaseErrors.Inc()
 		return pages, err
 	}
 	defer rows.Close()
@@ -209,9 +287,6 @@ func main() {
 		switch os.Args[1] {
 		case "init-db":
 			utils.InitDB()
-			return
-		case "seed-data":
-			utils.SeedData()
 			return
 		case "migration":
 			utils.Migration()
@@ -249,17 +324,18 @@ func main() {
 
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 
-	http.HandleFunc("/api/search", search)
-	http.HandleFunc("/api/login", login)
-	http.HandleFunc("/api/register", register)
-	http.HandleFunc("/api/logout", logout)
-	http.HandleFunc("/api/weather", weather)
-	http.HandleFunc("/api/batch-pages", batchPages)
-	http.HandleFunc("/login", login1)
-	http.HandleFunc("/weather", weather1)
-	http.HandleFunc("/register", register1)
-	http.HandleFunc("/about", about)
-	http.HandleFunc("/", index)
+	// Register endpoints with metrics tracking middleware
+	http.HandleFunc("/api/search", metricsMiddleware("/api/search", search))
+	http.HandleFunc("/api/login", metricsMiddleware("/api/login", login))
+	http.HandleFunc("/api/register", metricsMiddleware("/api/register", register))
+	http.HandleFunc("/api/logout", metricsMiddleware("/api/logout", logout))
+	http.HandleFunc("/api/weather", metricsMiddleware("/api/weather", weather))
+	http.HandleFunc("/api/batch-pages", metricsMiddleware("/api/batch-pages", batchPages))
+	http.HandleFunc("/login", metricsMiddleware("/login", login1))
+	http.HandleFunc("/weather", metricsMiddleware("/weather", weather1))
+	http.HandleFunc("/register", metricsMiddleware("/register", register1))
+	http.HandleFunc("/about", metricsMiddleware("/about", about))
+	http.HandleFunc("/", metricsMiddleware("/", index))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Prometheus metrics endpoint
@@ -275,17 +351,21 @@ func main() {
 }
 
 func search(response http.ResponseWriter, request *http.Request) {
-	httpRequestsTotal.WithLabelValues("/search", "200").Inc()
-
 	query := request.URL.Query().Get("q")
 	language := request.URL.Query().Get("language")
 	if language == "" {
 		language = "en"
 	}
 
+	// Track searches per session (if session exists)
+	if cookie, err := request.Cookie("session_token"); err == nil && query != "" {
+		sessionSearches.mu.Lock()
+		sessionSearches.searches[cookie.Value]++
+		sessionSearches.mu.Unlock()
+	}
+
 	pages, err := performSearch(query, language)
 	if err != nil {
-		httpRequestsTotal.WithLabelValues("/search", "500").Inc()
 		http.Error(response, "Search failed", http.StatusInternalServerError)
 		return
 	}
@@ -495,12 +575,21 @@ func logout(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
+	// Track searches per session metric before deleting session
+	sessionSearches.mu.Lock()
+	searchCount := sessionSearches.searches[cookie.Value]
+	if searchCount > 0 {
+		searchesPerSession.Observe(float64(searchCount))
+		delete(sessionSearches.searches, cookie.Value)
+	}
+	sessionSearches.mu.Unlock()
+
 	// Delete session from database
 	_, err = db.Exec("DELETE FROM sessions WHERE token = $1", cookie.Value)
 	if err != nil {
 		log.Printf("Logout failed: ip=%s reason=session_deletion_error error=%v", clientIP, err)
 	} else {
-		log.Printf("Logout success: ip=%s", clientIP)
+		log.Printf("Logout success: ip=%s searches=%d", clientIP, searchCount)
 	}
 
 	// Clear session cookie
