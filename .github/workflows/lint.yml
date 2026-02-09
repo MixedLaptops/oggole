@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Super-linter
-        uses: super-linter/super-linter@v8.1.0 # x-release-please-version
+        uses: super-linter/super-linter@v8.3.1 # x-release-please-version
         env:
           FILTER_REGEX_INCLUDE: ^(src/|Dockerfile)
           # To report GitHub Actions status checks
